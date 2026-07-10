@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Luna — Freelancers</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bordo:#6B1E2E; --bordo-dark:#4A1220; --bordo-light:#8B3345;
+    --creme:#F5EFE4; --creme-dark:#EDE4D4; --marrom:#A0785A;
+    --marrom-light:#C4A882; --marrom-dark:#7A5840;
+    --text:#2C1810; --text-light:#6B4F3A; --white:#FDFAF6;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Jost',sans-serif;background:var(--creme);color:var(--text);min-height:100vh}
+  a{color:inherit}
+
+  #carregandoOverlay{position:fixed;inset:0;z-index:99999;background:linear-gradient(145deg,#4A1220 0%,#2C0A14 60%,#1A0008 100%);display:flex;align-items:center;justify-content:center;color:#C4A882;font-size:.85rem;letter-spacing:.1em;text-transform:uppercase;text-align:center;padding:20px}
+
+  #appRoot{display:none}
+  header{background:var(--bordo);color:var(--creme);padding:14px 26px;display:flex;align-items:center;gap:20px;flex-wrap:wrap;box-shadow:0 2px 14px rgba(74,18,32,.25)}
+  .brand{font-family:'Cormorant Garamond',serif;font-weight:600;font-size:1.4rem}
+  .brand-sub{font-size:.68rem;letter-spacing:.18em;text-transform:uppercase;color:var(--marrom-light);margin-top:-2px}
+  header .spacer{flex:1}
+  header select{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.3);color:var(--creme);padding:8px 12px;border-radius:6px;font-family:'Jost',sans-serif;font-size:.82rem}
+  header select option{color:var(--text)}
+  .hbtn{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.3);color:var(--creme);padding:8px 14px;border-radius:6px;cursor:pointer;font-size:.78rem;text-decoration:none;display:inline-flex;align-items:center;gap:6px;transition:background .15s}
+  .hbtn:hover{background:rgba(255,255,255,.22)}
+
+  nav.tabs{display:flex;gap:2px;background:var(--white);border-bottom:1px solid var(--creme-dark);padding:0 26px;overflow-x:auto}
+  .tab{padding:14px 18px;font-size:.82rem;font-weight:500;color:var(--text-light);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap}
+  .tab.active{color:var(--bordo);border-bottom-color:var(--bordo);font-weight:600}
+
+  main{max-width:1140px;margin:0 auto;padding:28px 26px 60px}
+  .card{background:var(--white);border:1px solid var(--creme-dark);border-radius:12px;padding:22px;margin-bottom:18px}
+  .card h2{font-family:'Cormorant Garamond',serif;font-size:1.3rem;color:var(--bordo-dark);margin-bottom:14px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px}
+  .field{display:flex;flex-direction:column;gap:4px}
+  .field label{font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;color:var(--text-light);font-weight:500}
+  .inp,select.inp,textarea.inp{padding:9px 12px;border:1.5px solid var(--creme-dark);border-radius:7px;font-family:'Jost',sans-serif;font-size:.85rem;color:var(--text);background:var(--white)}
+  .inp:focus{outline:none;border-color:var(--marrom)}
+  .btn{background:var(--bordo);color:var(--creme);border:none;padding:10px 18px;border-radius:7px;font-size:.78rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;transition:background .15s}
+  .btn:hover{background:var(--bordo-dark)}
+  .btn:disabled{opacity:.5;cursor:default}
+  .btn-outline{background:none;border:1.5px solid var(--bordo);color:var(--bordo)}
+  .btn-outline:hover{background:var(--bordo);color:var(--creme)}
+  .btn-danger{background:none;border:none;color:#B43C3C;cursor:pointer;font-size:.85rem}
+  .btn-sm{padding:6px 12px;font-size:.72rem}
+  .btn-ok{background:#27AE60}
+  .btn-ok:hover{background:#1e8449}
+
+  table{width:100%;border-collapse:collapse;font-size:.82rem}
+  th{text-align:left;padding:9px 10px;background:var(--creme);color:var(--text-light);font-size:.68rem;text-transform:uppercase;letter-spacing:.05em}
+  td{padding:9px 10px;border-top:1px solid var(--creme-dark);vertical-align:top}
+  tr.inativo td{color:var(--text-light);opacity:.6}
+  .badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:.68rem;font-weight:600;white-space:nowrap}
+  .badge-ativo{background:#E8F8F0;color:#27AE60}
+  .badge-inativo{background:#FDEDEC;color:#B43C3C}
+  .badge-pend{background:#FEF3E2;color:#E67E22}
+
+  .empty{text-align:center;padding:40px;color:var(--text-light);font-size:.85rem}
+  .loading{text-align:center;padding:30px;color:var(--text-light)}
+
+  .diaria-linha{display:flex;gap:8px;align-items:flex-end;margin-bottom:8px}
+  .diaria-linha .field{flex:1}
+  .diaria-linha button{flex:0 0 auto}
+
+  .stat-box{display:flex;gap:18px;flex-wrap:wrap}
+  .stat{background:var(--creme);border-radius:10px;padding:18px 22px;min-width:170px}
+  .stat .num{font-family:'Cormorant Garamond',serif;font-size:2rem;color:var(--bordo-dark);font-weight:600;line-height:1}
+  .stat .lbl{font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--text-light);margin-top:6px}
+
+  .modal-overlay{display:none;position:fixed;inset:0;background:rgba(44,24,16,.5);z-index:500;align-items:center;justify-content:center;padding:20px}
+  .modal-overlay.show{display:flex}
+  .modal{width:100%;max-width:520px;max-height:88vh;overflow:auto;background:var(--white);border-radius:14px;padding:26px}
+  .modal h3{font-family:'Cormorant Garamond',serif;font-size:1.25rem;color:var(--bordo-dark);margin-bottom:14px}
+  .modal-actions{display:flex;gap:10px;margin-top:16px}
+  .modal-close{background:none;border:none;color:var(--marrom-dark);text-decoration:underline;cursor:pointer;font-size:.78rem;display:block;margin:14px auto 0}
+  .msg{font-size:.78rem;margin-top:8px;display:none}
+  .msg.show{display:block}
+  .msg.err{color:#B43C3C}
+  .msg.ok{color:#27AE60}
+</style>
+</head>
+<body>
+
+<div id="carregandoOverlay">Carregando…</div>
+
+<div id="appRoot">
+<header>
+  <div>
+    <div class="brand">LUNA <span style="font-size:.7em;font-weight:400">Freelancers</span></div>
+    <div class="brand-sub">Gestão de Diaristas</div>
+  </div>
+  <div class="field" id="seletorLojaWrap" style="min-width:220px">
+    <label style="color:var(--marrom-light)">Loja</label>
+    <select id="seletorLoja" class="inp" onchange="onTrocarLoja()"></select>
+  </div>
+  <div class="spacer"></div>
+  <a href="https://thiagodlborges.github.io/Sistema-Luna/" class="hbtn">← Sistema Luna</a>
+  <button class="hbtn" onclick="sairApp()">Sair</button>
+</header>
+
+<nav class="tabs">
+  <div class="tab active" id="tabCadastro" data-tab="cadastro" onclick="mudarTab('cadastro')">👤 Freelancers</div>
+  <div class="tab" id="tabSolicitar" data-tab="solicitar" onclick="mudarTab('solicitar')">📝 Nova Solicitação</div>
+  <div class="tab" id="tabHistorico" data-tab="historico" onclick="mudarTab('historico')">📋 Minhas Solicitações</div>
+  <div class="tab" id="tabGasto" data-tab="gasto" onclick="mudarTab('gasto')">💰 Gasto do Mês</div>
+  <div class="tab" id="tabAprovacao" style="display:none" data-tab="aprovacao" onclick="mudarTab('aprovacao')">✅ Aprovação</div>
+  <div class="tab" id="tabAprovados" style="display:none" data-tab="aprovados" onclick="mudarTab('aprovados')">🏦 Pagamentos</div>
+  <div class="tab" id="tabRelatorio" style="display:none" data-tab="relatorio" onclick="mudarTab('relatorio')">📊 Relatório Mensal</div>
+</nav>
+
+<main id="mainContent"><div class="loading">Carregando…</div></main>
+</div>
+
+<!-- MODAL: Novo/editar freelancer -->
+<div class="modal-overlay" id="modalFreelancer">
+  <div class="modal">
+    <h3 id="tituloFreelancer">Novo Freelancer</h3>
+    <div class="field" style="margin-bottom:10px"><label>Nome Completo</label><input class="inp" id="frNome"></div>
+    <div class="field" style="margin-bottom:10px"><label>CPF</label><input class="inp" id="frCpf" placeholder="000.000.000-00"></div>
+    <div class="row" style="margin-bottom:0">
+      <div class="field" style="flex:2"><label>Banco</label><input class="inp" id="frBanco" placeholder="Ex: Nubank, Itaú..."></div>
+      <div class="field" style="flex:1"><label>Agência</label><input class="inp" id="frAgencia"></div>
+      <div class="field" style="flex:1"><label>Conta</label><input class="inp" id="frConta"></div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <div class="field" style="flex:1">
+        <label>Tipo de Conta</label>
+        <select class="inp" id="frTipoConta">
+          <option value="corrente">Corrente</option>
+          <option value="poupanca">Poupança</option>
+          <option value="pix">Somente PIX</option>
+        </select>
+      </div>
+      <div class="field" style="flex:2"><label>Chave PIX (opcional)</label><input class="inp" id="frPix" placeholder="CPF, e-mail, telefone ou aleatória"></div>
+    </div>
+    <div class="msg" id="freelancerMsg"></div>
+    <div class="modal-actions"><button class="btn" onclick="salvarFreelancer()" id="btnSalvarFreelancer">Salvar</button></div>
+    <button class="modal-close" onclick="fecharModal('modalFreelancer')">Cancelar</button>
+  </div>
+</div>
+
+<!-- MODAL: Reprovar solicitação -->
+<div class="modal-overlay" id="modalReprovar">
+  <div class="modal">
+    <h3>Reprovar Solicitação</h3>
+    <div class="field" style="margin-bottom:10px"><label>Motivo (obrigatório)</label><textarea class="inp" id="reprovarMotivo" rows="3" placeholder="Explique por que está reprovando..."></textarea></div>
+    <div class="msg" id="reprovarMsg"></div>
+    <div class="modal-actions"><button class="btn" style="background:#B43C3C" onclick="confirmarReprovar()">Confirmar Reprovação</button></div>
+    <button class="modal-close" onclick="fecharModal('modalReprovar')">Cancelar</button>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+const SUPABASE_URL = 'https://pbuhwpcpdcnaheaywmdv.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBidWh3cGNwZGNuYWhlYXl3bWR2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyNjU5MzksImV4cCI6MjA5MTg0MTkzOX0.Mg4PVg96ZiV3C2Rn0GLQU9c7ui_41OlU6Ldqn5jcvyY';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const PORTAL_URL = 'https://thiagodlborges.github.io/Sistema-Luna/';
+const $ = id => document.getElementById(id);
+
+const TODAS_LOJAS = ['Esplanada','Cianê','Tucuruvi','Indaiatuba','Jundiaí','Praça da Moça - Diadema','Buriti Mogi Guaçu','SP Market','Iguatemi Campinas','Shopping Itaquera','Atrium'];
+const VALOR_PADRAO_DIARIA = 120;
+
+let meuPerfil = null;
+let minhasLojas = [];
+let lojaAtual = null;
+let currentTab = 'cadastro';
+let souCoordenador = false;
+let souAgencia = false;
+let temPapelDeLoja = false;
+let freelancersDaLoja = [];
+
+function esc(s){ return (s==null?'':String(s)).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtData(d){ return d ? new Date(d+'T12:00').toLocaleDateString('pt-BR') : '—'; }
+function fmtMoeda(v){ return (Number(v)||0).toLocaleString('pt-BR', { style:'currency', currency:'BRL' }); }
+function fecharModal(id){ $(id).classList.remove('show'); }
+function showMsg(id, txt, tipo){ const m=$(id); m.textContent=txt; m.className='msg'+(txt?' show '+(tipo||''):''); }
+
+async function sairApp(){
+  await sb.auth.signOut();
+  window.location.href = PORTAL_URL;
+}
+
+async function verificarAcessoEIniciar(){
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { window.location.href = PORTAL_URL; return; }
+
+  const { data: ok, error } = await sb.rpc('tem_acesso', { p_slug: 'freelancers' });
+  if (error || !ok) { await sb.auth.signOut(); window.location.href = PORTAL_URL; return; }
+
+  const { data: perfil } = await sb.from('perfis').select('*').eq('id', session.user.id).single();
+  if (!perfil) { window.location.href = PORTAL_URL; return; }
+  meuPerfil = perfil;
+
+  temPapelDeLoja = ['loja','master_loja','master'].includes(perfil.tipo);
+  souCoordenador = perfil.freelancer_coordenador === true || perfil.tipo === 'master';
+  souAgencia = perfil.freelancer_agencia === true || perfil.tipo === 'master';
+
+  if (perfil.tipo === 'master' || perfil.tipo === 'master_loja') minhasLojas = [...TODAS_LOJAS];
+  else if (perfil.lojas && perfil.lojas.length) minhasLojas = perfil.lojas;
+  else if (perfil.loja) minhasLojas = [perfil.loja];
+  else minhasLojas = [];
+
+  if (!temPapelDeLoja || !minhasLojas.length) {
+    // Coordenador/Agência puros não têm loja própria — escondem telas de loja
+    ['tabCadastro','tabSolicitar','tabHistorico','tabGasto'].forEach(id => $(id).remove());
+    $('seletorLojaWrap').style.display = 'none';
+    if (souCoordenador) { currentTab = 'aprovacao'; }
+    else if (souAgencia) { currentTab = 'aprovados'; }
+  } else {
+    const sel = $('seletorLoja');
+    sel.innerHTML = minhasLojas.map(l => '<option value="'+esc(l)+'">'+esc(l)+'</option>').join('');
+    lojaAtual = minhasLojas[0];
+  }
+
+  if (souCoordenador) $('tabAprovacao').style.display = '';
+  if (souAgencia) { $('tabAprovados').style.display = ''; $('tabRelatorio').style.display = ''; }
+  if (souCoordenador && !souAgencia) $('tabRelatorio').style.display = '';
+
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab===currentTab));
+  document.getElementById('appRoot').style.display = 'block';
+  document.getElementById('carregandoOverlay').remove();
+  renderTab();
+}
+
+function onTrocarLoja(){ lojaAtual = $('seletorLoja').value; renderTab(); }
+
+function mudarTab(tab){
+  currentTab = tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab===tab));
+  renderTab();
+}
+
+function renderTab(){
+  if(currentTab==='cadastro') renderCadastro();
+  else if(currentTab==='solicitar') renderSolicitar();
+  else if(currentTab==='historico') renderHistorico();
+  else if(currentTab==='gasto') renderGasto();
+  else if(currentTab==='aprovacao') renderAprovacao();
+  else if(currentTab==='aprovados') renderAprovados();
+  else if(currentTab==='relatorio') renderRelatorio();
+}
+
+// ── CADASTRO DE FREELANCERS ─────────────────────────────
+async function renderCadastro(){
+  const el = $('mainContent');
+  el.innerHTML = '<div class="loading">Carregando…</div>';
+  const { data, error } = await sb.from('freelancers').select('*').eq('loja', lojaAtual).order('ativo',{ascending:false}).order('nome_completo');
+  if(error){ el.innerHTML = '<div class="empty">Erro: '+esc(error.message)+'</div>'; return; }
+  const lista = data || [];
+  el.innerHTML =
+    '<div class="card">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">'+
+        '<h2 style="margin:0">Freelancers — '+esc(lojaAtual)+'</h2>'+
+        '<button class="btn" onclick="abrirNovoFreelancer()">+ Novo Freelancer</button>'+
+      '</div>'+
+      (lista.length ? '<table><thead><tr><th>Nome</th><th>CPF</th><th>Banco</th><th>Chave PIX</th><th>Status</th><th></th></tr></thead><tbody>'+
+        lista.map(f => (
+          '<tr class="'+(f.ativo?'':'inativo')+'">'+
+            '<td>'+esc(f.nome_completo)+'</td>'+
+            '<td>'+esc(f.cpf||'—')+'</td>'+
+            '<td>'+esc(f.banco||'—')+'</td>'+
+            '<td>'+esc(f.chave_pix||'—')+'</td>'+
+            '<td>'+(f.ativo?'<span class="badge badge-ativo">Ativo</span>':'<span class="badge badge-inativo">Inativo</span>')+'</td>'+
+            '<td style="white-space:nowrap">'+
+              '<button class="btn-outline btn btn-sm" onclick=\'abrirEditarFreelancer('+JSON.stringify(f)+')\'>Editar</button> '+
+              '<button class="btn-danger" onclick=\'toggleAtivoFreelancer('+JSON.stringify(f.id)+','+(!f.ativo)+')\'>'+(f.ativo?'Desativar':'Reativar')+'</button>'+
+            '</td>'+
+          '</tr>'
+        )).join('')+'</tbody></table>'
+      : '<div class="empty">Nenhum freelancer cadastrado nesta loja ainda.</div>')+
+    '</div>';
+}
+
+let freelancerEditandoId = null;
+
+function abrirNovoFreelancer(){
+  freelancerEditandoId = null;
+  $('tituloFreelancer').textContent = 'Novo Freelancer';
+  $('frNome').value=''; $('frCpf').value=''; $('frBanco').value=''; $('frAgencia').value='';
+  $('frConta').value=''; $('frTipoConta').value='corrente'; $('frPix').value='';
+  showMsg('freelancerMsg','','');
+  $('modalFreelancer').classList.add('show');
+}
+
+function abrirEditarFreelancer(f){
+  freelancerEditandoId = f.id;
+  $('tituloFreelancer').textContent = 'Editar Freelancer';
+  $('frNome').value=f.nome_completo||''; $('frCpf').value=f.cpf||''; $('frBanco').value=f.banco||'';
+  $('frAgencia').value=f.agencia_bancaria||''; $('frConta').value=f.conta||'';
+  $('frTipoConta').value=f.tipo_conta||'corrente'; $('frPix').value=f.chave_pix||'';
+  showMsg('freelancerMsg','','');
+  $('modalFreelancer').classList.add('show');
+}
+
+async function salvarFreelancer(){
+  const nome_completo = $('frNome').value.trim();
+  if(!nome_completo){ showMsg('freelancerMsg','Informe o nome completo.','err'); return; }
+  const payload = {
+    nome_completo,
+    cpf: $('frCpf').value.trim()||null,
+    banco: $('frBanco').value.trim()||null,
+    agencia_bancaria: $('frAgencia').value.trim()||null,
+    conta: $('frConta').value.trim()||null,
+    tipo_conta: $('frTipoConta').value,
+    chave_pix: $('frPix').value.trim()||null,
+  };
+  const btn = $('btnSalvarFreelancer');
+  btn.disabled = true; btn.textContent = 'Salvando…';
+  let error;
+  if(freelancerEditandoId){
+    ({ error } = await sb.from('freelancers').update(payload).eq('id', freelancerEditandoId));
+  } else {
+    ({ error } = await sb.from('freelancers').insert({ ...payload, loja: lojaAtual, ativo: true, criado_por: meuPerfil.id }));
+  }
+  btn.disabled = false; btn.textContent = 'Salvar';
+  if(error){ showMsg('freelancerMsg','Erro: '+error.message,'err'); return; }
+  fecharModal('modalFreelancer');
+  if(currentTab==='cadastro') renderCadastro();
+  if(currentTab==='solicitar') renderSolicitar();
+}
+
+async function toggleAtivoFreelancer(id, novoValor){
+  const { error } = await sb.from('freelancers').update({ ativo: novoValor }).eq('id', id);
+  if(error){ alert('Erro: '+error.message); return; }
+  renderCadastro();
+}
+
+// ── NOVA SOLICITAÇÃO ─────────────────────────────────────
+let diariasCount = 0;
+
+async function renderSolicitar(){
+  const el = $('mainContent');
+  el.innerHTML = '<div class="loading">Carregando…</div>';
+  const { data, error } = await sb.from('freelancers').select('id,nome_completo').eq('loja', lojaAtual).eq('ativo', true).order('nome_completo');
+  if(error){ el.innerHTML = '<div class="empty">Erro: '+esc(error.message)+'</div>'; return; }
+  freelancersDaLoja = data || [];
+
+  el.innerHTML =
+    '<div class="card">'+
+      '<h2>Nova Solicitação de Freelancer — '+esc(lojaAtual)+'</h2>'+
+      '<p style="font-size:.82rem;color:var(--text-light);margin-bottom:14px">A solicitação vai para aprovação do coordenador antes de ir para a agência. Cada solicitação pode ter no máximo 3 diárias.</p>'+
+      '<div class="row">'+
+        '<div class="field" style="flex:2">'+
+          '<label>Freelancer</label>'+
+          '<select class="inp" id="solFreelancer">'+
+            (freelancersDaLoja.length ? freelancersDaLoja.map(f=>'<option value="'+f.id+'">'+esc(f.nome_completo)+'</option>').join('') : '<option value="">Nenhum cadastrado</option>')+
+          '</select>'+
+        '</div>'+
+        '<button class="btn-outline btn btn-sm" onclick="abrirNovoFreelancer()">+ Novo Freelancer</button>'+
+      '</div>'+
+      '<label style="font-size:.7rem;text-transform:uppercase;color:var(--text-light);font-weight:500">Diárias (até 3)</label>'+
+      '<div id="diariasWrap" style="margin-top:8px"></div>'+
+      '<button class="btn-outline btn btn-sm" id="btnAddDiaria" style="margin-top:4px" onclick="addLinhaDiaria()">+ Adicionar diária</button>'+
+      '<div class="field" style="margin-top:14px"><label>Observações</label><textarea class="inp" id="solObs" rows="2"></textarea></div>'+
+      '<div class="msg" id="solMsg"></div>'+
+      '<div class="modal-actions" style="margin-top:14px"><button class="btn" id="btnSalvarSol" onclick="salvarSolicitacao()">Enviar para Aprovação</button></div>'+
+    '</div>';
+
+  diariasCount = 0;
+  $('diariasWrap').innerHTML = '';
+  addLinhaDiaria();
+}
+
+function addLinhaDiaria(){
+  if(diariasCount >= 3){ return; }
+  diariasCount++;
+  const id = 'diaria'+diariasCount;
+  const hoje = new Date().toISOString().slice(0,10);
+  $('diariasWrap').insertAdjacentHTML('beforeend',
+    '<div class="diaria-linha" id="'+id+'">'+
+      '<div class="field"><label>Data do serviço</label><input class="inp" type="date" value="'+hoje+'"></div>'+
+      '<div class="field"><label>Valor da diária (R$)</label><input class="inp" type="number" step="0.01" min="0" value="'+VALOR_PADRAO_DIARIA+'"></div>'+
+      (diariasCount>1 ? '<button type="button" class="btn-danger" onclick="removerLinhaDiaria(\''+id+'\')">Remover</button>' : '')+
+    '</div>'
+  );
+  if(diariasCount >= 3) $('btnAddDiaria').style.display = 'none';
+}
+
+function removerLinhaDiaria(id){
+  $(id).remove();
+  diariasCount--;
+  $('btnAddDiaria').style.display = '';
+}
+
+async function salvarSolicitacao(){
+  const freelancer_id = $('solFreelancer').value;
+  if(!freelancer_id){ showMsg('solMsg','Cadastre ou selecione um freelancer.','err'); return; }
+
+  const linhas = Array.from($('diariasWrap').querySelectorAll('.diaria-linha')).map(div => {
+    const inputs = div.querySelectorAll('input');
+    return { data_servico: inputs[0].value, valor_diaria: parseFloat(inputs[1].value) };
+  });
+  if(!linhas.length || linhas.some(l => !l.data_servico || isNaN(l.valor_diaria) || l.valor_diaria <= 0)){
+    showMsg('solMsg','Preencha data e valor válidos para cada diária.','err'); return;
+  }
+
+  const btn = $('btnSalvarSol');
+  btn.disabled = true; btn.textContent = 'Enviando…';
+
+  const { data: novaSol, error: errSol } = await sb.from('freelancer_solicitacoes').insert({
+    loja: lojaAtual, freelancer_id, status: 'pendente',
+    solicitado_por: meuPerfil.id, solicitado_por_nome: meuPerfil.nome,
+    observacao: $('solObs').value.trim() || null,
+  }).select('id').single();
+
+  if(errSol){ btn.disabled=false; btn.textContent='Enviar para Aprovação'; showMsg('solMsg','Erro: '+errSol.message,'err'); return; }
+
+  const { error: errDiarias } = await sb.from('freelancer_solicitacao_diarias').insert(
+    linhas.map(l => ({ solicitacao_id: novaSol.id, data_servico: l.data_servico, valor_diaria: l.valor_diaria }))
+  );
+
+  btn.disabled = false; btn.textContent = 'Enviar para Aprovação';
+  if(errDiarias){ showMsg('solMsg','Erro ao salvar diárias: '+errDiarias.message,'err'); return; }
+
+  showMsg('solMsg','Solicitação enviada! Aguardando aprovação do coordenador.','ok');
+  setTimeout(() => { if(currentTab==='solicitar') renderSolicitar(); }, 1200);
+}
+
+// ── MINHAS SOLICITAÇÕES (histórico) ──────────────────────
+async function renderHistorico(){
+  const el = $('mainContent');
+  el.innerHTML = '<div class="loading">Carregando…</div>';
+  const { data: sols, error } = await sb.from('freelancer_solicitacoes').select('*').eq('loja', lojaAtual).order('criado_em',{ascending:false});
+  if(error){ el.innerHTML = '<div class="empty">Erro: '+esc(error.message)+'</div>'; return; }
+  const lista = sols || [];
+  if(!lista.length){ el.innerHTML = '<div class="card"><h2>Minhas Solicitações — '+esc(lojaAtual)+'</h2><div class="empty">Nenhuma solicitação registrada ainda.</div></div>'; return; }
+
+  const { data: freelancersMap } = await sb.from('freelancers').select('id,nome_completo').eq('loja', lojaAtual);
+  const nomesFreelancer = {}; (freelancersMap||[]).forEach(f => nomesFreelancer[f.id] = f.nome_completo);
+
+  const { data: diarias } = await sb.from('freelancer_solicitacao_diarias').select('*').in('solicitacao_id', lista.map(s=>s.id));
+  const diariasPorSol = {};
+  (diarias||[]).forEach(d => { (diariasPorSol[d.solicitacao_id] = diariasPorSol[d.solicitacao_id]||[]).push(d); });
+
+  const badge = s => s==='aprovado' ? '<span class="badge badge-ativo">Aprovado</span>'
+    : s==='reprovado' ? '<span class="badge badge-inativo">Reprovado</span>'
+    : '<span class="badge badge-pend">Pendente</span>';
+
+  $('mainContent').innerHTML =
+    '<div class="card">'+
+      '<h2>Minhas Solicitações — '+esc(lojaAtual)+'</h2>'+
+      '<table><thead><tr><th>Freelancer</th><th>Diárias</th><th>Total</th><th>Status</th><th>Detalhe</th></tr></thead><tbody>'+
+      lista.map(s => {
+        const ds = diariasPorSol[s.id] || [];
+        const total = ds.reduce((a,d)=>a+Number(d.valor_diaria),0);
+        const datasTxt = ds.map(d=>fmtData(d.data_servico)).join(', ');
+        const detalhe = s.status==='reprovado' ? ('Motivo: '+esc(s.motivo_reprovacao||'—')) : (s.status==='aprovado' ? ('Aprovado por '+esc(s.aprovado_por_nome||'—')) : 'Aguardando coordenador');
+        return '<tr>'+
+          '<td>'+esc(nomesFreelancer[s.freelancer_id]||'—')+'</td>'+
+          '<td>'+datasTxt+'</td>'+
+          '<td>'+fmtMoeda(total)+'</td>'+
+          '<td>'+badge(s.status)+'</td>'+
+          '<td style="font-size:.76rem;color:var(--text-light)">'+detalhe+'</td>'+
+        '</tr>';
+      }).join('')+
+      '</tbody></table>'+
+    '</div>';
+}
+
+// ── GASTO DO MÊS (loja) ──────────────────────────────────
+async function renderGasto(){
+  const el = $('mainContent');
+  el.innerHTML = '<div class="loading">Carregando…</div>';
+  const inicioMes = new Date(); inicioMes.setDate(1);
+  const mesRef = inicioMes.toISOString().slice(0,10);
+
+  const { data, error } = await sb.from('vw_freelancer_gasto_mensal').select('*').eq('loja', lojaAtual).eq('mes_referencia', mesRef).maybeSingle();
+  if(error){ el.innerHTML = '<div class="empty">Erro: '+esc(error.message)+'</div>'; return; }
+
+  const total = data ? Number(data.total_gasto) : 0;
+  const qtd = data ? data.qtd_diarias : 0;
+  const nomeMes = inicioMes.toLocaleDateString('pt-BR', { month:'long', year:'numeric' });
+
+  $('mainContent').innerHTML =
+    '<div class="card">'+
+      '<h2>Gasto com Freelancers — '+esc(lojaAtual)+'</h2>'+
+      '<p style="font-size:.82rem;color:var(--text-light);margin-bottom:16px">Parcial de '+esc(nomeMes)+', considerando apenas diárias já aprovadas.</p>'+
+      '<div class="stat-box">'+
+        '<div class="stat"><div class="num">'+fmtMoeda(total)+'</div><div class="lbl">Total aprovado no mês</div></div>'+
+        '<div class="stat"><div class="num">'+qtd+'</div><div class="lbl">Diárias aprovadas</div></div>'+
+      '</div>'+
+    '</div>';
+}
+
+// ── APROVAÇÃO (coordenador) ──────────────────────────────
+let solicitacaoParaReprovar = null;
+
+async function renderAprovacao(){
+  const el = $('mainContent');
+  el.innerHTML = '<div class="loading">Carregando…</div>';
+  const { data, error } = await sb.from('vw_freelancer_pendentes').select('*').order('criado_em');
+  if(error){ el.innerHTML = '<div class="empty">Erro: '+esc(error.message)+'</div>'; return; }
+  const lista = data || [];
+
+  $('mainContent').innerHTML =
+    '<div class="card">'+
+      '<h2>Fila de Aprovação</h2>'+
+      (lista.length ? '<table><thead><tr><th>Loja</th><th>Freelancer</th><th>Diárias</th><th>Total</th><th>Solicitado por</th><th>Obs.</th><th></th></tr></thead><tbody>'+
+        lista.map(s => (
+          '<tr>'+
+            '<td>'+esc(s.loja)+'</td>'+
+            '<td>'+esc(s.nome_completo)+'</td>'+
+            '<td>'+(s.datas_servico||[]).map(fmtData).join(', ')+'</td>'+
+            '<td>'+fmtMoeda(s.valor_total)+'</td>'+
+            '<td>'+esc(s.solicitado_por_nome||'—')+'</td>'+
+            '<td style="max-width:180px;font-size:.76rem;color:var(--text-light)">'+esc(s.observacao||'—')+'</td>'+
+            '<td style="white-space:nowrap">'+
+              '<button class="btn btn-sm btn-ok" onclick=\'aprovarSolicitacao('+JSON.stringify(s.solicitacao_id)+')\'>Aprovar</button> '+
+              '<button class="btn-danger" onclick=\'abrirReprovar('+JSON.stringify(s.solicitacao_id)+')\'>Reprovar</button>'+
+            '</td>'+
+          '</tr>'
+        )).join('')+'</tbody></table>'
+      : '<div class="empty">Nenhuma solicitação pendente no momento.</div>')+
+    '</div>';
+}
+
+async function aprovarSolicitacao(id){
+  const { error } = await sb.from('freelancer_solicitacoes').update({
+    status: 'aprovado', aprovado_por: meuPerfil.id, aprovado_por_nome: meuPerfil.nome, data_aprovacao: new Date().toISOString(),
+  }).eq('id', id);
+  if(error){ alert('Erro: '+error.message); return; }
+  renderAprovacao();
+}
+
+function abrirReprovar(id){
+  solicitacaoParaReprovar = id;
+  $('reprovarMotivo').value = '';
+  showMsg('reprovarMsg','','');
+  $('modalReprovar').classList.add('show');
+}
+
+async function confirmarReprovar(){
+  const motivo = $('reprovarMotivo').value.trim();
+  if(!motivo){ showMsg('reprovarMsg','Informe o motivo da reprovação.','err'); return; }
+  const { error } = await sb.from('freelancer_solicitacoes').update({
+    status: 'reprovado', motivo_reprovacao: motivo,
+    aprovado_por: meuPerfil.id, aprovado_por_nome: meuPerfil.nome, data_aprovacao: new Date().toISOString(),
+  }).eq('id', solicitacaoParaReprovar);
+  if(error){ showMsg('reprovarMsg','Erro: '+error.message,'err'); return; }
+  fecharModal('modalReprovar');
+  renderAprovacao();
+}
+
+// ── PAGAMENTOS (agência) ─────────────────────────────────
+async function renderAprovados(){
+  const el = $('mainContent');
+  el.innerHTML =
+    '<div class="card">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">'+
+        '<h2 style="margin:0">Aprovados para Pagamento</h2>'+
+        '<button class="btn-outline btn btn-sm" onclick="exportarAprovadosExcel()">⬇ Exportar Excel</button>'+
+      '</div>'+
+      '<div id="aprovadosTabela" class="loading">Carregando…</div>'+
+    '</div>';
+
+  const { data, error } = await sb.from('vw_freelancer_aprovados_detalhe').select('*').order('loja').order('data_servico',{ascending:false});
+  if(error){ $('aprovadosTabela').innerHTML = '<div class="empty">Erro: '+esc(error.message)+'</div>'; return; }
+  window.__aprovadosCache = data || [];
+  const lista = window.__aprovadosCache;
+
+  $('aprovadosTabela').outerHTML = lista.length ?
+    '<div id="aprovadosTabela"><table><thead><tr><th>Loja</th><th>Freelancer</th><th>CPF</th><th>Banco</th><th>Ag./Conta</th><th>PIX</th><th>Data</th><th>Valor</th></tr></thead><tbody>'+
+      lista.map(a => (
+        '<tr>'+
+          '<td>'+esc(a.loja)+'</td>'+
+          '<td>'+esc(a.nome_completo)+'</td>'+
+          '<td>'+esc(a.cpf||'—')+'</td>'+
+          '<td>'+esc(a.banco||'—')+'</td>'+
+          '<td>'+esc((a.agencia_bancaria||'—')+' / '+(a.conta||'—'))+'</td>'+
+          '<td>'+esc(a.chave_pix||'—')+'</td>'+
+          '<td>'+fmtData(a.data_servico)+'</td>'+
+          '<td>'+fmtMoeda(a.valor_diaria)+'</td>'+
+        '</tr>'
+      )).join('')+'</tbody></table></div>'
+    : '<div id="aprovadosTabela" class="empty">Nenhuma diária aprovada aguardando pagamento.</div>';
+}
+
+function exportarAprovadosExcel(){
+  const lista = window.__aprovadosCache || [];
+  if(!lista.length){ alert('Não há dados para exportar.'); return; }
+  const linhas = lista.map(a => ({
+    Loja: a.loja, Freelancer: a.nome_completo, CPF: a.cpf||'', Banco: a.banco||'',
+    Agência: a.agencia_bancaria||'', Conta: a.conta||'', 'Chave PIX': a.chave_pix||'',
+    Data: fmtData(a.data_servico), 'Valor (R$)': Number(a.valor_diaria),
+  }));
+  const ws = XLSX.utils.json_to_sheet(linhas);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Pagamentos');
+  XLSX.writeFile(wb, 'freelancers-pagamentos-'+new Date().toISOString().slice(0,10)+'.xlsx');
+}
+
+// ── RELATÓRIO MENSAL (fechamento por loja) ───────────────
+async function renderRelatorio(){
+  const hoje = new Date();
+  const mesDefault = hoje.toISOString().slice(0,7);
+  $('mainContent').innerHTML =
+    '<div class="card">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:10px;margin-bottom:14px">'+
+        '<div class="field"><label>Mês de referência</label><input class="inp" type="month" id="relMes" value="'+mesDefault+'" onchange="carregarRelatorio()"></div>'+
+        '<button class="btn-outline btn btn-sm" onclick="exportarRelatorioExcel()">⬇ Exportar Excel</button>'+
+      '</div>'+
+      '<div id="relatorioTabela" class="loading">Carregando…</div>'+
+    '</div>';
+  await carregarRelatorio();
+}
+
+async function carregarRelatorio(){
+  const mes = $('relMes').value; // YYYY-MM
+  const mesRef = mes+'-01';
+  const { data, error } = await sb.from('vw_freelancer_gasto_mensal').select('*').eq('mes_referencia', mesRef).order('loja');
+  if(error){ $('relatorioTabela').innerHTML = '<div class="empty">Erro: '+esc(error.message)+'</div>'; return; }
+  window.__relatorioCache = data || [];
+  const lista = window.__relatorioCache;
+  const totalGeral = lista.reduce((a,l)=>a+Number(l.total_gasto),0);
+  const diariasGeral = lista.reduce((a,l)=>a+Number(l.qtd_diarias),0);
+
+  $('relatorioTabela').innerHTML = lista.length ?
+    '<table><thead><tr><th>Loja</th><th>Diárias</th><th>Total Gasto</th></tr></thead><tbody>'+
+      lista.map(l => '<tr><td>'+esc(l.loja)+'</td><td>'+l.qtd_diarias+'</td><td>'+fmtMoeda(l.total_gasto)+'</td></tr>').join('')+
+      '<tr style="font-weight:600;border-top:2px solid var(--creme-dark)"><td>Total Geral</td><td>'+diariasGeral+'</td><td>'+fmtMoeda(totalGeral)+'</td></tr>'+
+    '</tbody></table>'
+    : '<div class="empty">Nenhum gasto aprovado neste mês.</div>';
+}
+
+function exportarRelatorioExcel(){
+  const lista = window.__relatorioCache || [];
+  if(!lista.length){ alert('Não há dados para exportar.'); return; }
+  const mes = $('relMes').value;
+  const linhas = lista.map(l => ({ Loja: l.loja, Diárias: l.qtd_diarias, 'Total Gasto (R$)': Number(l.total_gasto) }));
+  const totalGeral = lista.reduce((a,l)=>a+Number(l.total_gasto),0);
+  const diariasGeral = lista.reduce((a,l)=>a+Number(l.qtd_diarias),0);
+  linhas.push({ Loja: 'TOTAL GERAL', Diárias: diariasGeral, 'Total Gasto (R$)': totalGeral });
+  const ws = XLSX.utils.json_to_sheet(linhas);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Fechamento');
+  XLSX.writeFile(wb, 'freelancers-fechamento-'+mes+'.xlsx');
+}
+
+verificarAcessoEIniciar();
+</script>
+</body>
+</html>
