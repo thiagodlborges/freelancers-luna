@@ -194,6 +194,7 @@ let souCoordenador = false;
 let souAgencia = false;
 let temPapelDeLoja = false;
 let freelancersDaLoja = [];
+let freelancerConfig = { percentual_custo_empresa: 0 };
 
 function esc(s){ return (s==null?'':String(s)).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function fmtData(d){ return d ? new Date(d+'T12:00').toLocaleDateString('pt-BR') : '—'; }
@@ -241,6 +242,9 @@ async function verificarAcessoEIniciar(){
   if (souCoordenador) $('tabAprovacao').style.display = '';
   if (souAgencia) { $('tabAprovados').style.display = ''; $('tabRelatorio').style.display = ''; }
   if (souCoordenador && !souAgencia) $('tabRelatorio').style.display = '';
+
+  const { data: cfg } = await sb.from('freelancer_config').select('*').eq('id', true).maybeSingle();
+  if (cfg) freelancerConfig = cfg;
 
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab===currentTab));
   document.getElementById('appRoot').style.display = 'block';
@@ -571,27 +575,89 @@ async function excluirSolicitacao(id){
 
 // ── GASTO DO MÊS (loja) ──────────────────────────────────
 async function renderGasto(){
-  const el = $('mainContent');
-  el.innerHTML = '<div class="loading">Carregando…</div>';
-  const inicioMes = new Date(); inicioMes.setDate(1);
-  const mesRef = inicioMes.toISOString().slice(0,10);
-
-  const { data, error } = await sb.from('vw_freelancer_gasto_mensal').select('*').eq('loja', lojaAtual).eq('mes_referencia', mesRef).maybeSingle();
-  if(error){ el.innerHTML = '<div class="empty">Erro: '+esc(error.message)+'</div>'; return; }
-
-  const total = data ? Number(data.total_gasto) : 0;
-  const qtd = data ? data.qtd_diarias : 0;
-  const nomeMes = inicioMes.toLocaleDateString('pt-BR', { month:'long', year:'numeric' });
+  const hoje = new Date();
+  const mesDefault = hoje.toISOString().slice(0,7);
+  const souMaster = meuPerfil.tipo === 'master';
 
   $('mainContent').innerHTML =
     '<div class="card">'+
-      '<h2>Gasto com Freelancers — '+esc(lojaAtual)+'</h2>'+
-      '<p style="font-size:.82rem;color:var(--text-light);margin-bottom:16px">Parcial de '+esc(nomeMes)+', considerando apenas diárias já aprovadas.</p>'+
-      '<div class="stat-box">'+
-        '<div class="stat"><div class="num">'+fmtMoeda(total)+'</div><div class="lbl">Total aprovado no mês</div></div>'+
-        '<div class="stat"><div class="num">'+qtd+'</div><div class="lbl">Diárias aprovadas</div></div>'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:14px;margin-bottom:16px">'+
+        '<div><h2 style="margin-bottom:2px">Gasto com Freelancers — '+esc(lojaAtual)+'</h2>'+
+        '<p style="font-size:.8rem;color:var(--text-light)">Considera apenas diárias já aprovadas.</p></div>'+
+        '<div class="field"><label>Mês de referência</label><input class="inp" type="month" id="gastoMes" value="'+mesDefault+'" onchange="carregarGasto()"></div>'+
       '</div>'+
+      (souMaster ?
+        '<div class="row" style="align-items:flex-end;background:var(--creme);padding:12px 14px;border-radius:8px;margin-bottom:16px">'+
+          '<div class="field"><label>Percentual de custo adicional pra empresa</label><input class="inp" type="number" step="0.01" min="0" id="cfgPercentual" value="'+freelancerConfig.percentual_custo_empresa+'" style="max-width:120px"></div>'+
+          '<button class="btn btn-sm" onclick="salvarPercentualConfig()" id="btnSalvarPercentual">Salvar %</button>'+
+          '<span class="msg" id="cfgMsg" style="margin-bottom:8px"></span>'+
+        '</div>'
+      : '')+
+      '<div id="gastoStats" class="loading">Carregando…</div>'+
+      '<div id="gastoDetalhe" style="margin-top:20px"></div>'+
     '</div>';
+
+  await carregarGasto();
+}
+
+async function salvarPercentualConfig(){
+  const valor = parseFloat($('cfgPercentual').value);
+  if(isNaN(valor) || valor < 0){ showMsg('cfgMsg','Informe um percentual válido.','err'); return; }
+  const btn = $('btnSalvarPercentual');
+  btn.disabled = true; btn.textContent = 'Salvando…';
+  const { error } = await sb.from('freelancer_config').update({
+    percentual_custo_empresa: valor, atualizado_por_nome: meuPerfil.nome, atualizado_em: new Date().toISOString(),
+  }).eq('id', true);
+  btn.disabled = false; btn.textContent = 'Salvar %';
+  if(error){ showMsg('cfgMsg','Erro: '+error.message,'err'); return; }
+  freelancerConfig.percentual_custo_empresa = valor;
+  showMsg('cfgMsg','Salvo!','ok');
+  carregarGasto();
+}
+
+async function carregarGasto(){
+  const mes = $('gastoMes').value; // YYYY-MM
+  const mesRef = mes+'-01';
+  const [ano, mesNum] = mes.split('-').map(Number);
+  const ultimoDia = new Date(ano, mesNum, 0).toISOString().slice(0,10);
+  const nomeMes = new Date(ano, mesNum-1, 1).toLocaleDateString('pt-BR', { month:'long', year:'numeric' });
+
+  const [resumoR, detalheR] = await Promise.all([
+    sb.from('vw_freelancer_gasto_mensal').select('*').eq('loja', lojaAtual).eq('mes_referencia', mesRef).maybeSingle(),
+    sb.from('vw_freelancer_diarias_aprovadas').select('*').eq('loja', lojaAtual).gte('data_servico', mesRef).lte('data_servico', ultimoDia).order('data_servico',{ascending:false}),
+  ]);
+  if(resumoR.error){ $('gastoStats').innerHTML = '<div class="empty">Erro: '+esc(resumoR.error.message)+'</div>'; return; }
+
+  const d = resumoR.data;
+  const totalAprovado = d ? Number(d.total_gasto) : 0;
+  const totalPago = d ? Number(d.total_pago) : 0;
+  const totalPendentePagto = d ? Number(d.total_pendente_pagamento) : 0;
+  const qtd = d ? d.qtd_diarias : 0;
+  const pct = Number(freelancerConfig.percentual_custo_empresa) || 0;
+  const custoEmpresa = totalAprovado * (1 + pct/100);
+
+  $('gastoStats').innerHTML =
+    '<p style="font-size:.8rem;color:var(--text-light);margin-bottom:12px">'+esc(nomeMes)+'</p>'+
+    '<div class="stat-box">'+
+      '<div class="stat"><div class="num">'+fmtMoeda(totalAprovado)+'</div><div class="lbl">Total aprovado no mês ('+qtd+' diárias)</div></div>'+
+      '<div class="stat"><div class="num" style="color:#27AE60">'+fmtMoeda(totalPago)+'</div><div class="lbl">Já pago</div></div>'+
+      '<div class="stat"><div class="num" style="color:#E67E22">'+fmtMoeda(totalPendentePagto)+'</div><div class="lbl">Pendente de pagamento</div></div>'+
+      '<div class="stat" style="background:var(--bordo);"><div class="num" style="color:var(--creme)">'+fmtMoeda(custoEmpresa)+'</div><div class="lbl" style="color:var(--marrom-light)">Custo total pra empresa (+'+pct+'%)</div></div>'+
+    '</div>';
+
+  const lista = detalheR.data || [];
+  $('gastoDetalhe').innerHTML =
+    '<h3 style="font-family:\'Cormorant Garamond\',serif;font-size:1.05rem;color:var(--bordo-dark);margin-bottom:8px">Detalhamento</h3>'+
+    (lista.length ? '<table><thead><tr><th>Freelancer</th><th>Data</th><th>Valor</th><th>Status</th></tr></thead><tbody>'+
+      lista.map(a => (
+        '<tr>'+
+          '<td>'+esc(a.nome_completo)+'</td>'+
+          '<td>'+fmtData(a.data_servico)+'</td>'+
+          '<td>'+fmtMoeda(a.valor_diaria)+'</td>'+
+          '<td>'+(a.pago ? '<span class="badge badge-ativo">Pago'+(a.pago_em?' — '+fmtData(a.pago_em.slice(0,10)):'')+'</span>' : '<span class="badge badge-pend">Pendente de pagamento</span>')+'</td>'+
+        '</tr>'
+      )).join('')+'</tbody></table>'
+    : '<div class="empty">Nenhuma diária aprovada nesse mês.</div>');
 }
 
 // ── APROVAÇÃO (coordenador) ──────────────────────────────
@@ -672,7 +738,7 @@ async function renderAprovados(){
 
   const souMaster = meuPerfil.tipo === 'master';
   $('aprovadosTabela').outerHTML = lista.length ?
-    '<div id="aprovadosTabela"><table><thead><tr><th>Loja</th><th>Freelancer</th><th>CPF</th><th>Banco</th><th>Ag./Conta</th><th>PIX</th><th>Data</th><th>Valor</th>'+(souMaster?'<th></th>':'')+'</tr></thead><tbody>'+
+    '<div id="aprovadosTabela"><table><thead><tr><th>Loja</th><th>Freelancer</th><th>CPF</th><th>Banco</th><th>Ag./Conta</th><th>PIX</th><th>Data</th><th>Valor</th><th>Pago</th>'+(souMaster?'<th></th>':'')+'</tr></thead><tbody>'+
       lista.map(a => (
         '<tr>'+
           '<td>'+esc(a.loja)+'</td>'+
@@ -683,10 +749,22 @@ async function renderAprovados(){
           '<td>'+esc(a.chave_pix||'—')+'</td>'+
           '<td>'+fmtData(a.data_servico)+'</td>'+
           '<td>'+fmtMoeda(a.valor_diaria)+'</td>'+
+          '<td style="text-align:center">'+
+            '<input type="checkbox" '+(a.pago?'checked':'')+' onchange=\'togglePago('+JSON.stringify(a.diaria_id)+',this.checked)\' style="width:18px;height:18px;cursor:pointer" title="'+(a.pago && a.pago_em ? 'Pago em '+fmtData(a.pago_em.slice(0,10))+(a.pago_por_nome?' por '+esc(a.pago_por_nome):'') : 'Marcar como pago')+'">'+
+          '</td>'+
           (souMaster ? '<td><button class="btn-danger" onclick=\'excluirSolicitacao('+JSON.stringify(a.solicitacao_id)+')\' title="Excluir o lançamento inteiro (todas as diárias dessa solicitação)">🗑️</button></td>' : '')+
         '</tr>'
       )).join('')+'</tbody></table></div>'
     : '<div id="aprovadosTabela" class="empty">Nenhuma diária aprovada aguardando pagamento.</div>';
+}
+
+async function togglePago(diaria_id, marcado){
+  const payload = marcado
+    ? { pago: true, pago_em: new Date().toISOString(), pago_por: meuPerfil.id, pago_por_nome: meuPerfil.nome }
+    : { pago: false, pago_em: null, pago_por: null, pago_por_nome: null };
+  const { error } = await sb.from('freelancer_solicitacao_diarias').update(payload).eq('id', diaria_id);
+  if(error){ alert('Erro: '+error.message); }
+  renderAprovados();
 }
 
 function exportarAprovadosExcel(){
@@ -696,6 +774,7 @@ function exportarAprovadosExcel(){
     Loja: a.loja, Freelancer: a.nome_completo, CPF: a.cpf||'', Banco: a.banco||'',
     Agência: a.agencia_bancaria||'', Conta: a.conta||'', 'Chave PIX': a.chave_pix||'',
     Data: fmtData(a.data_servico), 'Valor (R$)': Number(a.valor_diaria),
+    Pago: a.pago ? 'Sim' : 'Não', 'Pago em': a.pago_em ? fmtData(a.pago_em.slice(0,10)) : '',
   }));
   const ws = XLSX.utils.json_to_sheet(linhas);
   const wb = XLSX.utils.book_new();
@@ -733,18 +812,20 @@ async function carregarRelatorio(){
   window.__relatorioDetalheCache = detalheR.data || [];
   const lista = window.__relatorioCache;
   const detalhe = window.__relatorioDetalheCache;
+  const pct = Number(freelancerConfig.percentual_custo_empresa) || 0;
   const totalGeral = lista.reduce((a,l)=>a+Number(l.total_gasto),0);
   const diariasGeral = lista.reduce((a,l)=>a+Number(l.qtd_diarias),0);
+  const custoEmpresaGeral = totalGeral * (1 + pct/100);
 
   const tabelaResumo = lista.length ?
-    '<table><thead><tr><th>Loja</th><th>Diárias</th><th>Total Gasto</th></tr></thead><tbody>'+
-      lista.map(l => '<tr><td>'+esc(l.loja)+'</td><td>'+l.qtd_diarias+'</td><td>'+fmtMoeda(l.total_gasto)+'</td></tr>').join('')+
-      '<tr style="font-weight:600;border-top:2px solid var(--creme-dark)"><td>Total Geral</td><td>'+diariasGeral+'</td><td>'+fmtMoeda(totalGeral)+'</td></tr>'+
+    '<table><thead><tr><th>Loja</th><th>Diárias</th><th>Total Pago ao Freelancer</th><th>Custo Total pra Empresa (+'+pct+'%)</th></tr></thead><tbody>'+
+      lista.map(l => '<tr><td>'+esc(l.loja)+'</td><td>'+l.qtd_diarias+'</td><td>'+fmtMoeda(l.total_gasto)+'</td><td>'+fmtMoeda(Number(l.total_gasto)*(1+pct/100))+'</td></tr>').join('')+
+      '<tr style="font-weight:600;border-top:2px solid var(--creme-dark)"><td>Total Geral</td><td>'+diariasGeral+'</td><td>'+fmtMoeda(totalGeral)+'</td><td>'+fmtMoeda(custoEmpresaGeral)+'</td></tr>'+
     '</tbody></table>'
     : '<div class="empty">Nenhum gasto aprovado neste mês.</div>';
 
   const tabelaDetalhe = detalhe.length ?
-    '<table><thead><tr><th>Loja</th><th>Freelancer</th><th>CPF</th><th>Banco</th><th>Ag./Conta</th><th>PIX</th><th>Data</th><th>Valor</th></tr></thead><tbody>'+
+    '<table><thead><tr><th>Loja</th><th>Freelancer</th><th>CPF</th><th>Banco</th><th>Ag./Conta</th><th>PIX</th><th>Data</th><th>Valor</th><th>Pago</th></tr></thead><tbody>'+
       detalhe.map(a => (
         '<tr>'+
           '<td>'+esc(a.loja)+'</td>'+
@@ -755,6 +836,7 @@ async function carregarRelatorio(){
           '<td>'+esc(a.chave_pix||'—')+'</td>'+
           '<td>'+fmtData(a.data_servico)+'</td>'+
           '<td>'+fmtMoeda(a.valor_diaria)+'</td>'+
+          '<td>'+(a.pago?'<span class="badge badge-ativo">Sim</span>':'<span class="badge badge-pend">Não</span>')+'</td>'+
         '</tr>'
       )).join('')+'</tbody></table>'
     : '<div class="empty">Nenhum pagamento aprovado neste mês.</div>';
@@ -772,16 +854,24 @@ function exportarRelatorioExcel(){
   if(!lista.length && !detalhe.length){ alert('Não há dados para exportar.'); return; }
   const mes = $('relMes').value;
 
-  const linhasResumo = lista.map(l => ({ Loja: l.loja, Diárias: l.qtd_diarias, 'Total Gasto (R$)': Number(l.total_gasto) }));
+  const pct = Number(freelancerConfig.percentual_custo_empresa) || 0;
+  const linhasResumo = lista.map(l => ({
+    Loja: l.loja, Diárias: l.qtd_diarias, 'Total Pago ao Freelancer (R$)': Number(l.total_gasto),
+    ['Custo Total pra Empresa (+'+pct+'%) (R$)']: Number(l.total_gasto) * (1+pct/100),
+  }));
   const totalGeral = lista.reduce((a,l)=>a+Number(l.total_gasto),0);
   const diariasGeral = lista.reduce((a,l)=>a+Number(l.qtd_diarias),0);
-  linhasResumo.push({ Loja: 'TOTAL GERAL', Diárias: diariasGeral, 'Total Gasto (R$)': totalGeral });
+  linhasResumo.push({
+    Loja: 'TOTAL GERAL', Diárias: diariasGeral, 'Total Pago ao Freelancer (R$)': totalGeral,
+    ['Custo Total pra Empresa (+'+pct+'%) (R$)']: totalGeral * (1+pct/100),
+  });
 
   // Aba com nome do freelancer e dados bancários — pronta pra agência pagar sem nova consulta
   const linhasDetalhe = detalhe.map(a => ({
     Loja: a.loja, Freelancer: a.nome_completo, CPF: a.cpf||'', Banco: a.banco||'',
     Agência: a.agencia_bancaria||'', Conta: a.conta||'', 'Tipo de Conta': a.tipo_conta||'',
     'Chave PIX': a.chave_pix||'', Data: fmtData(a.data_servico), 'Valor (R$)': Number(a.valor_diaria),
+    Pago: a.pago ? 'Sim' : 'Não',
   }));
 
   const wb = XLSX.utils.book_new();
