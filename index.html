@@ -144,6 +144,25 @@
   </div>
 </div>
 
+<!-- MODAL: Editar solicitação (só enquanto pendente) -->
+<div class="modal-overlay" id="modalEditarSolicitacao">
+  <div class="modal" style="max-width:560px">
+    <h3>Editar Solicitação</h3>
+    <p style="font-size:.82rem;color:var(--text-light);margin-bottom:14px">Só é possível editar enquanto a solicitação está pendente de aprovação.</p>
+    <div class="field" style="margin-bottom:12px">
+      <label>Freelancer</label>
+      <select class="inp" id="editSolFreelancer"></select>
+    </div>
+    <label style="font-size:.7rem;text-transform:uppercase;color:var(--text-light);font-weight:500">Diárias (até 3)</label>
+    <div id="editDiariasWrap" style="margin-top:8px"></div>
+    <button class="btn-outline btn btn-sm" id="btnAddEditDiaria" style="margin-top:4px" onclick="addLinhaEditDiaria()">+ Adicionar diária</button>
+    <div class="field" style="margin-top:14px"><label>Observações</label><textarea class="inp" id="editSolObs" rows="2"></textarea></div>
+    <div class="msg" id="editSolMsg"></div>
+    <div class="modal-actions"><button class="btn" id="btnSalvarEdicaoSol" onclick="salvarEdicaoSolicitacao()">Salvar Alterações</button></div>
+    <button class="modal-close" onclick="fecharModal('modalEditarSolicitacao')">Cancelar</button>
+  </div>
+</div>
+
 <!-- MODAL: Reprovar solicitação -->
 <div class="modal-overlay" id="modalReprovar">
   <div class="modal">
@@ -271,6 +290,7 @@ async function renderCadastro(){
             '<td style="white-space:nowrap">'+
               '<button class="btn-outline btn btn-sm" onclick=\'abrirEditarFreelancer('+JSON.stringify(f)+')\'>Editar</button> '+
               '<button class="btn-danger" onclick=\'toggleAtivoFreelancer('+JSON.stringify(f.id)+','+(!f.ativo)+')\'>'+(f.ativo?'Desativar':'Reativar')+'</button>'+
+              (meuPerfil.tipo==='master' ? ' <button class="btn-danger" onclick=\'excluirFreelancer('+JSON.stringify(f.id)+')\' title="Excluir cadastro (permanente)">🗑️</button>' : '')+
             '</td>'+
           '</tr>'
         )).join('')+'</tbody></table>'
@@ -324,6 +344,13 @@ async function salvarFreelancer(){
   fecharModal('modalFreelancer');
   if(currentTab==='cadastro') renderCadastro();
   if(currentTab==='solicitar') renderSolicitar();
+}
+
+async function excluirFreelancer(id){
+  if(!confirm('Excluir este cadastro de freelancer permanentemente? Essa ação não pode ser desfeita.')) return;
+  const { error } = await sb.from('freelancers').delete().eq('id', id);
+  if(error){ alert('Erro: '+error.message); return; }
+  renderCadastro();
 }
 
 async function toggleAtivoFreelancer(id, novoValor){
@@ -446,22 +473,100 @@ async function renderHistorico(){
   $('mainContent').innerHTML =
     '<div class="card">'+
       '<h2>Minhas Solicitações — '+esc(lojaAtual)+'</h2>'+
-      '<table><thead><tr><th>Freelancer</th><th>Diárias</th><th>Total</th><th>Status</th><th>Detalhe</th></tr></thead><tbody>'+
+      '<table><thead><tr><th>Freelancer</th><th>Diárias</th><th>Total</th><th>Status</th><th>Detalhe</th><th></th></tr></thead><tbody>'+
       lista.map(s => {
         const ds = diariasPorSol[s.id] || [];
         const total = ds.reduce((a,d)=>a+Number(d.valor_diaria),0);
         const datasTxt = ds.map(d=>fmtData(d.data_servico)).join(', ');
         const detalhe = s.status==='reprovado' ? ('Motivo: '+esc(s.motivo_reprovacao||'—')) : (s.status==='aprovado' ? ('Aprovado por '+esc(s.aprovado_por_nome||'—')) : 'Aguardando coordenador');
+        const acoes = [];
+        if(s.status==='pendente') acoes.push('<button class="btn-outline btn btn-sm" onclick=\'abrirEditarSolicitacao('+JSON.stringify(s)+','+JSON.stringify(ds)+')\'>Editar</button>');
+        if(meuPerfil.tipo==='master') acoes.push('<button class="btn-danger" onclick=\'excluirSolicitacao('+JSON.stringify(s.id)+')\'>Excluir</button>');
         return '<tr>'+
           '<td>'+esc(nomesFreelancer[s.freelancer_id]||'—')+'</td>'+
           '<td>'+datasTxt+'</td>'+
           '<td>'+fmtMoeda(total)+'</td>'+
           '<td>'+badge(s.status)+'</td>'+
           '<td style="font-size:.76rem;color:var(--text-light)">'+detalhe+'</td>'+
+          '<td style="white-space:nowrap">'+acoes.join(' ')+'</td>'+
         '</tr>';
       }).join('')+
       '</tbody></table>'+
     '</div>';
+}
+
+let editandoSolicitacaoId = null;
+let editDiariasCount = 0;
+
+async function abrirEditarSolicitacao(s, diariasAtuais){
+  editandoSolicitacaoId = s.id;
+  const { data: freelancersLista } = await sb.from('freelancers').select('id,nome_completo').eq('loja', s.loja).eq('ativo', true).order('nome_completo');
+  const opts = freelancersLista || [];
+  $('editSolFreelancer').innerHTML = opts.map(f=>'<option value="'+f.id+'"'+(f.id===s.freelancer_id?' selected':'')+'>'+esc(f.nome_completo)+'</option>').join('');
+  $('editSolObs').value = s.observacao || '';
+  $('editDiariasWrap').innerHTML = '';
+  editDiariasCount = 0;
+  (diariasAtuais.length ? diariasAtuais : [{data_servico:new Date().toISOString().slice(0,10), valor_diaria:VALOR_PADRAO_DIARIA}]).forEach(d => addLinhaEditDiaria(d.data_servico, d.valor_diaria));
+  showMsg('editSolMsg','','');
+  $('modalEditarSolicitacao').classList.add('show');
+}
+
+function addLinhaEditDiaria(data, valor){
+  if(editDiariasCount >= 3) return;
+  editDiariasCount++;
+  const id = 'editDiaria'+editDiariasCount;
+  $('editDiariasWrap').insertAdjacentHTML('beforeend',
+    '<div class="diaria-linha" id="'+id+'">'+
+      '<div class="field"><label>Data do serviço</label><input class="inp" type="date" value="'+(data||new Date().toISOString().slice(0,10))+'"></div>'+
+      '<div class="field"><label>Valor da diária (R$)</label><input class="inp" type="number" step="0.01" min="0" value="'+(valor!=null?valor:VALOR_PADRAO_DIARIA)+'"></div>'+
+      (editDiariasCount>1 ? '<button type="button" class="btn-danger" onclick="removerLinhaEditDiaria(\''+id+'\')">Remover</button>' : '')+
+    '</div>'
+  );
+  if(editDiariasCount >= 3) $('btnAddEditDiaria').style.display = 'none'; else $('btnAddEditDiaria').style.display = '';
+}
+
+function removerLinhaEditDiaria(id){
+  $(id).remove();
+  editDiariasCount--;
+  $('btnAddEditDiaria').style.display = '';
+}
+
+async function salvarEdicaoSolicitacao(){
+  const freelancer_id = $('editSolFreelancer').value;
+  if(!freelancer_id){ showMsg('editSolMsg','Selecione um freelancer.','err'); return; }
+  const linhas = Array.from($('editDiariasWrap').querySelectorAll('.diaria-linha')).map(div => {
+    const inputs = div.querySelectorAll('input');
+    return { data_servico: inputs[0].value, valor_diaria: parseFloat(inputs[1].value) };
+  });
+  if(!linhas.length || linhas.some(l => !l.data_servico || isNaN(l.valor_diaria) || l.valor_diaria <= 0)){
+    showMsg('editSolMsg','Preencha data e valor válidos para cada diária.','err'); return;
+  }
+  const btn = $('btnSalvarEdicaoSol');
+  btn.disabled = true; btn.textContent = 'Salvando…';
+
+  const { error: errHeader } = await sb.from('freelancer_solicitacoes').update({
+    freelancer_id, observacao: $('editSolObs').value.trim() || null,
+  }).eq('id', editandoSolicitacaoId);
+  if(errHeader){ btn.disabled=false; btn.textContent='Salvar Alterações'; showMsg('editSolMsg','Erro: '+errHeader.message,'err'); return; }
+
+  const { error: errDel } = await sb.from('freelancer_solicitacao_diarias').delete().eq('solicitacao_id', editandoSolicitacaoId);
+  if(errDel){ btn.disabled=false; btn.textContent='Salvar Alterações'; showMsg('editSolMsg','Erro: '+errDel.message,'err'); return; }
+
+  const { error: errIns } = await sb.from('freelancer_solicitacao_diarias').insert(
+    linhas.map(l => ({ solicitacao_id: editandoSolicitacaoId, data_servico: l.data_servico, valor_diaria: l.valor_diaria }))
+  );
+  btn.disabled = false; btn.textContent = 'Salvar Alterações';
+  if(errIns){ showMsg('editSolMsg','Erro ao salvar diárias: '+errIns.message,'err'); return; }
+
+  fecharModal('modalEditarSolicitacao');
+  renderHistorico();
+}
+
+async function excluirSolicitacao(id){
+  if(!confirm('Excluir esta solicitação? Isso remove também todas as diárias associadas a ela, mesmo que já aprovadas. Essa ação é permanente.')) return;
+  const { error } = await sb.from('freelancer_solicitacoes').delete().eq('id', id);
+  if(error){ alert('Erro: '+error.message); return; }
+  renderTab();
 }
 
 // ── GASTO DO MÊS (loja) ──────────────────────────────────
@@ -565,8 +670,9 @@ async function renderAprovados(){
   window.__aprovadosCache = data || [];
   const lista = window.__aprovadosCache;
 
+  const souMaster = meuPerfil.tipo === 'master';
   $('aprovadosTabela').outerHTML = lista.length ?
-    '<div id="aprovadosTabela"><table><thead><tr><th>Loja</th><th>Freelancer</th><th>CPF</th><th>Banco</th><th>Ag./Conta</th><th>PIX</th><th>Data</th><th>Valor</th></tr></thead><tbody>'+
+    '<div id="aprovadosTabela"><table><thead><tr><th>Loja</th><th>Freelancer</th><th>CPF</th><th>Banco</th><th>Ag./Conta</th><th>PIX</th><th>Data</th><th>Valor</th>'+(souMaster?'<th></th>':'')+'</tr></thead><tbody>'+
       lista.map(a => (
         '<tr>'+
           '<td>'+esc(a.loja)+'</td>'+
@@ -577,6 +683,7 @@ async function renderAprovados(){
           '<td>'+esc(a.chave_pix||'—')+'</td>'+
           '<td>'+fmtData(a.data_servico)+'</td>'+
           '<td>'+fmtMoeda(a.valor_diaria)+'</td>'+
+          (souMaster ? '<td><button class="btn-danger" onclick=\'excluirSolicitacao('+JSON.stringify(a.solicitacao_id)+')\' title="Excluir o lançamento inteiro (todas as diárias dessa solicitação)">🗑️</button></td>' : '')+
         '</tr>'
       )).join('')+'</tbody></table></div>'
     : '<div id="aprovadosTabela" class="empty">Nenhuma diária aprovada aguardando pagamento.</div>';
@@ -614,32 +721,72 @@ async function renderRelatorio(){
 async function carregarRelatorio(){
   const mes = $('relMes').value; // YYYY-MM
   const mesRef = mes+'-01';
-  const { data, error } = await sb.from('vw_freelancer_gasto_mensal').select('*').eq('mes_referencia', mesRef).order('loja');
-  if(error){ $('relatorioTabela').innerHTML = '<div class="empty">Erro: '+esc(error.message)+'</div>'; return; }
-  window.__relatorioCache = data || [];
+  const [ano, mesNum] = mes.split('-').map(Number);
+  const ultimoDia = new Date(ano, mesNum, 0).toISOString().slice(0,10); // último dia do mês
+
+  const [resumoR, detalheR] = await Promise.all([
+    sb.from('vw_freelancer_gasto_mensal').select('*').eq('mes_referencia', mesRef).order('loja'),
+    sb.from('vw_freelancer_aprovados_detalhe').select('*').gte('data_servico', mesRef).lte('data_servico', ultimoDia).order('loja').order('nome_completo'),
+  ]);
+  if(resumoR.error){ $('relatorioTabela').innerHTML = '<div class="empty">Erro: '+esc(resumoR.error.message)+'</div>'; return; }
+  window.__relatorioCache = resumoR.data || [];
+  window.__relatorioDetalheCache = detalheR.data || [];
   const lista = window.__relatorioCache;
+  const detalhe = window.__relatorioDetalheCache;
   const totalGeral = lista.reduce((a,l)=>a+Number(l.total_gasto),0);
   const diariasGeral = lista.reduce((a,l)=>a+Number(l.qtd_diarias),0);
 
-  $('relatorioTabela').innerHTML = lista.length ?
+  const tabelaResumo = lista.length ?
     '<table><thead><tr><th>Loja</th><th>Diárias</th><th>Total Gasto</th></tr></thead><tbody>'+
       lista.map(l => '<tr><td>'+esc(l.loja)+'</td><td>'+l.qtd_diarias+'</td><td>'+fmtMoeda(l.total_gasto)+'</td></tr>').join('')+
       '<tr style="font-weight:600;border-top:2px solid var(--creme-dark)"><td>Total Geral</td><td>'+diariasGeral+'</td><td>'+fmtMoeda(totalGeral)+'</td></tr>'+
     '</tbody></table>'
     : '<div class="empty">Nenhum gasto aprovado neste mês.</div>';
+
+  const tabelaDetalhe = detalhe.length ?
+    '<table><thead><tr><th>Loja</th><th>Freelancer</th><th>CPF</th><th>Banco</th><th>Ag./Conta</th><th>PIX</th><th>Data</th><th>Valor</th></tr></thead><tbody>'+
+      detalhe.map(a => (
+        '<tr>'+
+          '<td>'+esc(a.loja)+'</td>'+
+          '<td>'+esc(a.nome_completo)+'</td>'+
+          '<td>'+esc(a.cpf||'—')+'</td>'+
+          '<td>'+esc(a.banco||'—')+'</td>'+
+          '<td>'+esc((a.agencia_bancaria||'—')+' / '+(a.conta||'—'))+'</td>'+
+          '<td>'+esc(a.chave_pix||'—')+'</td>'+
+          '<td>'+fmtData(a.data_servico)+'</td>'+
+          '<td>'+fmtMoeda(a.valor_diaria)+'</td>'+
+        '</tr>'
+      )).join('')+'</tbody></table>'
+    : '<div class="empty">Nenhum pagamento aprovado neste mês.</div>';
+
+  $('relatorioTabela').innerHTML =
+    '<h3 style="font-family:\'Cormorant Garamond\',serif;font-size:1.05rem;color:var(--bordo-dark);margin-bottom:8px">Fechamento por loja</h3>'+
+    tabelaResumo+
+    '<h3 style="font-family:\'Cormorant Garamond\',serif;font-size:1.05rem;color:var(--bordo-dark);margin:22px 0 8px">Detalhamento — dados para pagamento</h3>'+
+    tabelaDetalhe;
 }
 
 function exportarRelatorioExcel(){
   const lista = window.__relatorioCache || [];
-  if(!lista.length){ alert('Não há dados para exportar.'); return; }
+  const detalhe = window.__relatorioDetalheCache || [];
+  if(!lista.length && !detalhe.length){ alert('Não há dados para exportar.'); return; }
   const mes = $('relMes').value;
-  const linhas = lista.map(l => ({ Loja: l.loja, Diárias: l.qtd_diarias, 'Total Gasto (R$)': Number(l.total_gasto) }));
+
+  const linhasResumo = lista.map(l => ({ Loja: l.loja, Diárias: l.qtd_diarias, 'Total Gasto (R$)': Number(l.total_gasto) }));
   const totalGeral = lista.reduce((a,l)=>a+Number(l.total_gasto),0);
   const diariasGeral = lista.reduce((a,l)=>a+Number(l.qtd_diarias),0);
-  linhas.push({ Loja: 'TOTAL GERAL', Diárias: diariasGeral, 'Total Gasto (R$)': totalGeral });
-  const ws = XLSX.utils.json_to_sheet(linhas);
+  linhasResumo.push({ Loja: 'TOTAL GERAL', Diárias: diariasGeral, 'Total Gasto (R$)': totalGeral });
+
+  // Aba com nome do freelancer e dados bancários — pronta pra agência pagar sem nova consulta
+  const linhasDetalhe = detalhe.map(a => ({
+    Loja: a.loja, Freelancer: a.nome_completo, CPF: a.cpf||'', Banco: a.banco||'',
+    Agência: a.agencia_bancaria||'', Conta: a.conta||'', 'Tipo de Conta': a.tipo_conta||'',
+    'Chave PIX': a.chave_pix||'', Data: fmtData(a.data_servico), 'Valor (R$)': Number(a.valor_diaria),
+  }));
+
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Fechamento');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(linhasResumo), 'Fechamento por Loja');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(linhasDetalhe), 'Dados para Pagamento');
   XLSX.writeFile(wb, 'freelancers-fechamento-'+mes+'.xlsx');
 }
 
