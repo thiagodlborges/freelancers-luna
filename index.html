@@ -185,6 +185,7 @@ const $ = id => document.getElementById(id);
 
 const TODAS_LOJAS = ['Esplanada','Cianê','Tucuruvi','Indaiatuba','Jundiaí','Praça da Moça - Diadema','Buriti Mogi Guaçu','SP Market','Iguatemi Campinas','Shopping Itaquera','Atrium'];
 const VALOR_PADRAO_DIARIA = 120;
+const VALORES_POR_CARGA = { '6h': 100, '8h': 120 };
 
 let meuPerfil = null;
 let minhasLojas = [];
@@ -406,12 +407,20 @@ function addLinhaDiaria(){
   const hoje = new Date().toISOString().slice(0,10);
   $('diariasWrap').insertAdjacentHTML('beforeend',
     '<div class="diaria-linha" id="'+id+'">'+
-      '<div class="field"><label>Data do serviço</label><input class="inp" type="date" value="'+hoje+'"></div>'+
-      '<div class="field"><label>Valor da diária (R$)</label><input class="inp" type="number" step="0.01" min="0" value="'+VALOR_PADRAO_DIARIA+'"></div>'+
+      '<div class="field"><label>Data do serviço</label><input class="inp diaria-data" type="date" value="'+hoje+'"></div>'+
+      '<div class="field"><label>Carga horária</label><select class="inp diaria-carga" onchange="sugerirValorDiaria(this)"><option value="6h">6 horas</option><option value="8h" selected>8 horas</option></select></div>'+
+      '<div class="field"><label>Valor da diária (R$)</label><input class="inp diaria-valor" type="number" step="0.01" min="0" value="'+VALOR_PADRAO_DIARIA+'"></div>'+
       (diariasCount>1 ? '<button type="button" class="btn-danger" onclick="removerLinhaDiaria(\''+id+'\')">Remover</button>' : '')+
     '</div>'
   );
   if(diariasCount >= 3) $('btnAddDiaria').style.display = 'none';
+}
+
+function sugerirValorDiaria(selectEl){
+  const linha = selectEl.closest('.diaria-linha');
+  const valorInput = linha.querySelector('.diaria-valor');
+  const sugerido = VALORES_POR_CARGA[selectEl.value];
+  if(sugerido != null) valorInput.value = sugerido; // sugestão, não trava — o gerente pode editar depois
 }
 
 function removerLinhaDiaria(id){
@@ -424,10 +433,11 @@ async function salvarSolicitacao(){
   const freelancer_id = $('solFreelancer').value;
   if(!freelancer_id){ showMsg('solMsg','Cadastre ou selecione um freelancer.','err'); return; }
 
-  const linhas = Array.from($('diariasWrap').querySelectorAll('.diaria-linha')).map(div => {
-    const inputs = div.querySelectorAll('input');
-    return { data_servico: inputs[0].value, valor_diaria: parseFloat(inputs[1].value) };
-  });
+  const linhas = Array.from($('diariasWrap').querySelectorAll('.diaria-linha')).map(div => ({
+    data_servico: div.querySelector('.diaria-data').value,
+    carga_horaria: div.querySelector('.diaria-carga').value,
+    valor_diaria: parseFloat(div.querySelector('.diaria-valor').value),
+  }));
   if(!linhas.length || linhas.some(l => !l.data_servico || isNaN(l.valor_diaria) || l.valor_diaria <= 0)){
     showMsg('solMsg','Preencha data e valor válidos para cada diária.','err'); return;
   }
@@ -444,7 +454,7 @@ async function salvarSolicitacao(){
   if(errSol){ btn.disabled=false; btn.textContent='Enviar para Aprovação'; showMsg('solMsg','Erro: '+errSol.message,'err'); return; }
 
   const { error: errDiarias } = await sb.from('freelancer_solicitacao_diarias').insert(
-    linhas.map(l => ({ solicitacao_id: novaSol.id, data_servico: l.data_servico, valor_diaria: l.valor_diaria }))
+    linhas.map(l => ({ solicitacao_id: novaSol.id, data_servico: l.data_servico, carga_horaria: l.carga_horaria, valor_diaria: l.valor_diaria }))
   );
 
   btn.disabled = false; btn.textContent = 'Enviar para Aprovação';
@@ -481,7 +491,7 @@ async function renderHistorico(){
       lista.map(s => {
         const ds = diariasPorSol[s.id] || [];
         const total = ds.reduce((a,d)=>a+Number(d.valor_diaria),0);
-        const datasTxt = ds.map(d=>fmtData(d.data_servico)).join(', ');
+        const datasTxt = ds.map(d=>fmtData(d.data_servico)+' ('+(d.carga_horaria||'—')+')').join(', ');
         const detalhe = s.status==='reprovado' ? ('Motivo: '+esc(s.motivo_reprovacao||'—')) : (s.status==='aprovado' ? ('Aprovado por '+esc(s.aprovado_por_nome||'—')) : 'Aguardando coordenador');
         const acoes = [];
         if(s.status==='pendente') acoes.push('<button class="btn-outline btn btn-sm" onclick=\'abrirEditarSolicitacao('+JSON.stringify(s)+','+JSON.stringify(ds)+')\'>Editar</button>');
@@ -510,19 +520,21 @@ async function abrirEditarSolicitacao(s, diariasAtuais){
   $('editSolObs').value = s.observacao || '';
   $('editDiariasWrap').innerHTML = '';
   editDiariasCount = 0;
-  (diariasAtuais.length ? diariasAtuais : [{data_servico:new Date().toISOString().slice(0,10), valor_diaria:VALOR_PADRAO_DIARIA}]).forEach(d => addLinhaEditDiaria(d.data_servico, d.valor_diaria));
+  (diariasAtuais.length ? diariasAtuais : [{data_servico:new Date().toISOString().slice(0,10), carga_horaria:'8h', valor_diaria:VALOR_PADRAO_DIARIA}]).forEach(d => addLinhaEditDiaria(d.data_servico, d.carga_horaria, d.valor_diaria));
   showMsg('editSolMsg','','');
   $('modalEditarSolicitacao').classList.add('show');
 }
 
-function addLinhaEditDiaria(data, valor){
+function addLinhaEditDiaria(data, carga, valor){
   if(editDiariasCount >= 3) return;
   editDiariasCount++;
   const id = 'editDiaria'+editDiariasCount;
+  const cargaVal = carga || '8h';
   $('editDiariasWrap').insertAdjacentHTML('beforeend',
     '<div class="diaria-linha" id="'+id+'">'+
-      '<div class="field"><label>Data do serviço</label><input class="inp" type="date" value="'+(data||new Date().toISOString().slice(0,10))+'"></div>'+
-      '<div class="field"><label>Valor da diária (R$)</label><input class="inp" type="number" step="0.01" min="0" value="'+(valor!=null?valor:VALOR_PADRAO_DIARIA)+'"></div>'+
+      '<div class="field"><label>Data do serviço</label><input class="inp diaria-data" type="date" value="'+(data||new Date().toISOString().slice(0,10))+'"></div>'+
+      '<div class="field"><label>Carga horária</label><select class="inp diaria-carga" onchange="sugerirValorDiaria(this)"><option value="6h"'+(cargaVal==='6h'?' selected':'')+'>6 horas</option><option value="8h"'+(cargaVal==='8h'?' selected':'')+'>8 horas</option></select></div>'+
+      '<div class="field"><label>Valor da diária (R$)</label><input class="inp diaria-valor" type="number" step="0.01" min="0" value="'+(valor!=null?valor:VALOR_PADRAO_DIARIA)+'"></div>'+
       (editDiariasCount>1 ? '<button type="button" class="btn-danger" onclick="removerLinhaEditDiaria(\''+id+'\')">Remover</button>' : '')+
     '</div>'
   );
@@ -538,10 +550,11 @@ function removerLinhaEditDiaria(id){
 async function salvarEdicaoSolicitacao(){
   const freelancer_id = $('editSolFreelancer').value;
   if(!freelancer_id){ showMsg('editSolMsg','Selecione um freelancer.','err'); return; }
-  const linhas = Array.from($('editDiariasWrap').querySelectorAll('.diaria-linha')).map(div => {
-    const inputs = div.querySelectorAll('input');
-    return { data_servico: inputs[0].value, valor_diaria: parseFloat(inputs[1].value) };
-  });
+  const linhas = Array.from($('editDiariasWrap').querySelectorAll('.diaria-linha')).map(div => ({
+    data_servico: div.querySelector('.diaria-data').value,
+    carga_horaria: div.querySelector('.diaria-carga').value,
+    valor_diaria: parseFloat(div.querySelector('.diaria-valor').value),
+  }));
   if(!linhas.length || linhas.some(l => !l.data_servico || isNaN(l.valor_diaria) || l.valor_diaria <= 0)){
     showMsg('editSolMsg','Preencha data e valor válidos para cada diária.','err'); return;
   }
@@ -557,7 +570,7 @@ async function salvarEdicaoSolicitacao(){
   if(errDel){ btn.disabled=false; btn.textContent='Salvar Alterações'; showMsg('editSolMsg','Erro: '+errDel.message,'err'); return; }
 
   const { error: errIns } = await sb.from('freelancer_solicitacao_diarias').insert(
-    linhas.map(l => ({ solicitacao_id: editandoSolicitacaoId, data_servico: l.data_servico, valor_diaria: l.valor_diaria }))
+    linhas.map(l => ({ solicitacao_id: editandoSolicitacaoId, data_servico: l.data_servico, carga_horaria: l.carga_horaria, valor_diaria: l.valor_diaria }))
   );
   btn.disabled = false; btn.textContent = 'Salvar Alterações';
   if(errIns){ showMsg('editSolMsg','Erro ao salvar diárias: '+errIns.message,'err'); return; }
@@ -648,11 +661,12 @@ async function carregarGasto(){
   const lista = detalheR.data || [];
   $('gastoDetalhe').innerHTML =
     '<h3 style="font-family:\'Cormorant Garamond\',serif;font-size:1.05rem;color:var(--bordo-dark);margin-bottom:8px">Detalhamento</h3>'+
-    (lista.length ? '<table><thead><tr><th>Freelancer</th><th>Data</th><th>Valor</th><th>Status</th></tr></thead><tbody>'+
+    (lista.length ? '<table><thead><tr><th>Freelancer</th><th>Data</th><th>Carga</th><th>Valor</th><th>Status</th></tr></thead><tbody>'+
       lista.map(a => (
         '<tr>'+
           '<td>'+esc(a.nome_completo)+'</td>'+
           '<td>'+fmtData(a.data_servico)+'</td>'+
+          '<td>'+esc(a.carga_horaria||'—')+'</td>'+
           '<td>'+fmtMoeda(a.valor_diaria)+'</td>'+
           '<td>'+(a.pago ? '<span class="badge badge-ativo">Pago'+(a.pago_em?' — '+fmtData(a.pago_em.slice(0,10)):'')+'</span>' : '<span class="badge badge-pend">Pendente de pagamento</span>')+'</td>'+
         '</tr>'
@@ -678,7 +692,7 @@ async function renderAprovacao(){
           '<tr>'+
             '<td>'+esc(s.loja)+'</td>'+
             '<td>'+esc(s.nome_completo)+'</td>'+
-            '<td>'+(s.datas_servico||[]).map(fmtData).join(', ')+'</td>'+
+            '<td>'+(s.datas_servico||[]).map((d,i)=>fmtData(d)+' ('+((s.cargas_horarias||[])[i]||'—')+')').join(', ')+'</td>'+
             '<td>'+fmtMoeda(s.valor_total)+'</td>'+
             '<td>'+esc(s.solicitado_por_nome||'—')+'</td>'+
             '<td style="max-width:180px;font-size:.76rem;color:var(--text-light)">'+esc(s.observacao||'—')+'</td>'+
@@ -738,7 +752,7 @@ async function renderAprovados(){
 
   const souMaster = meuPerfil.tipo === 'master';
   $('aprovadosTabela').outerHTML = lista.length ?
-    '<div id="aprovadosTabela"><table><thead><tr><th>Loja</th><th>Freelancer</th><th>CPF</th><th>Banco</th><th>Ag./Conta</th><th>PIX</th><th>Data</th><th>Valor</th><th>Pago</th>'+(souMaster?'<th></th>':'')+'</tr></thead><tbody>'+
+    '<div id="aprovadosTabela"><table><thead><tr><th>Loja</th><th>Freelancer</th><th>CPF</th><th>Banco</th><th>Ag./Conta</th><th>PIX</th><th>Data</th><th>Carga</th><th>Valor</th><th>Pago</th>'+(souMaster?'<th></th>':'')+'</tr></thead><tbody>'+
       lista.map(a => (
         '<tr>'+
           '<td>'+esc(a.loja)+'</td>'+
@@ -748,6 +762,7 @@ async function renderAprovados(){
           '<td>'+esc((a.agencia_bancaria||'—')+' / '+(a.conta||'—'))+'</td>'+
           '<td>'+esc(a.chave_pix||'—')+'</td>'+
           '<td>'+fmtData(a.data_servico)+'</td>'+
+          '<td>'+esc(a.carga_horaria||'—')+'</td>'+
           '<td>'+fmtMoeda(a.valor_diaria)+'</td>'+
           '<td style="text-align:center">'+
             '<input type="checkbox" '+(a.pago?'checked':'')+' onchange=\'togglePago('+JSON.stringify(a.diaria_id)+',this.checked)\' style="width:18px;height:18px;cursor:pointer" title="'+(a.pago && a.pago_em ? 'Pago em '+fmtData(a.pago_em.slice(0,10))+(a.pago_por_nome?' por '+esc(a.pago_por_nome):'') : 'Marcar como pago')+'">'+
@@ -773,7 +788,7 @@ function exportarAprovadosExcel(){
   const linhas = lista.map(a => ({
     Loja: a.loja, Freelancer: a.nome_completo, CPF: a.cpf||'', Banco: a.banco||'',
     Agência: a.agencia_bancaria||'', Conta: a.conta||'', 'Chave PIX': a.chave_pix||'',
-    Data: fmtData(a.data_servico), 'Valor (R$)': Number(a.valor_diaria),
+    Data: fmtData(a.data_servico), Carga: a.carga_horaria||'', 'Valor (R$)': Number(a.valor_diaria),
     Pago: a.pago ? 'Sim' : 'Não', 'Pago em': a.pago_em ? fmtData(a.pago_em.slice(0,10)) : '',
   }));
   const ws = XLSX.utils.json_to_sheet(linhas);
@@ -825,7 +840,7 @@ async function carregarRelatorio(){
     : '<div class="empty">Nenhum gasto aprovado neste mês.</div>';
 
   const tabelaDetalhe = detalhe.length ?
-    '<table><thead><tr><th>Loja</th><th>Freelancer</th><th>CPF</th><th>Banco</th><th>Ag./Conta</th><th>PIX</th><th>Data</th><th>Valor</th><th>Pago</th></tr></thead><tbody>'+
+    '<table><thead><tr><th>Loja</th><th>Freelancer</th><th>CPF</th><th>Banco</th><th>Ag./Conta</th><th>PIX</th><th>Data</th><th>Carga</th><th>Valor</th><th>Pago</th></tr></thead><tbody>'+
       detalhe.map(a => (
         '<tr>'+
           '<td>'+esc(a.loja)+'</td>'+
@@ -835,6 +850,7 @@ async function carregarRelatorio(){
           '<td>'+esc((a.agencia_bancaria||'—')+' / '+(a.conta||'—'))+'</td>'+
           '<td>'+esc(a.chave_pix||'—')+'</td>'+
           '<td>'+fmtData(a.data_servico)+'</td>'+
+          '<td>'+esc(a.carga_horaria||'—')+'</td>'+
           '<td>'+fmtMoeda(a.valor_diaria)+'</td>'+
           '<td>'+(a.pago?'<span class="badge badge-ativo">Sim</span>':'<span class="badge badge-pend">Não</span>')+'</td>'+
         '</tr>'
@@ -870,7 +886,7 @@ function exportarRelatorioExcel(){
   const linhasDetalhe = detalhe.map(a => ({
     Loja: a.loja, Freelancer: a.nome_completo, CPF: a.cpf||'', Banco: a.banco||'',
     Agência: a.agencia_bancaria||'', Conta: a.conta||'', 'Tipo de Conta': a.tipo_conta||'',
-    'Chave PIX': a.chave_pix||'', Data: fmtData(a.data_servico), 'Valor (R$)': Number(a.valor_diaria),
+    'Chave PIX': a.chave_pix||'', Data: fmtData(a.data_servico), Carga: a.carga_horaria||'', 'Valor (R$)': Number(a.valor_diaria),
     Pago: a.pago ? 'Sim' : 'Não',
   }));
 
