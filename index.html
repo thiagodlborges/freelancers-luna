@@ -14,6 +14,7 @@
     --text:#2C1810; --text-light:#6B4F3A; --white:#FDFAF6;
   }
   *{box-sizing:border-box;margin:0;padding:0}
+  html,body{overflow-x:hidden;max-width:100vw}
   body{font-family:'Jost',sans-serif;background:var(--creme);color:var(--text);min-height:100vh}
   a{color:inherit}
 
@@ -51,7 +52,8 @@
   .btn-ok{background:#27AE60}
   .btn-ok:hover{background:#1e8449}
 
-  table{width:100%;border-collapse:collapse;font-size:.82rem}
+  .table-wrap{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  table{width:100%;min-width:560px;border-collapse:collapse;font-size:.82rem}
   th{text-align:left;padding:9px 10px;background:var(--creme);color:var(--text-light);font-size:.68rem;text-transform:uppercase;letter-spacing:.05em}
   td{padding:9px 10px;border-top:1px solid var(--creme-dark);vertical-align:top}
   tr.inativo td{color:var(--text-light);opacity:.6}
@@ -82,6 +84,13 @@
   .msg.show{display:block}
   .msg.err{color:#B43C3C}
   .msg.ok{color:#27AE60}
+
+  @media (max-width:600px){
+    header{padding:12px 16px}
+    nav.tabs{padding:0 16px}
+    main{padding:20px 16px 50px}
+    .card{padding:16px}
+  }
 </style>
 </head>
 <body>
@@ -287,7 +296,7 @@ async function renderCadastro(){
         '<h2 style="margin:0">Freelancers — '+esc(lojaAtual)+'</h2>'+
         '<button class="btn" onclick="abrirNovoFreelancer()">+ Novo Freelancer</button>'+
       '</div>'+
-      (lista.length ? '<table><thead><tr><th>Nome</th><th>CPF</th><th>Banco</th><th>Chave PIX</th><th>Status</th><th></th></tr></thead><tbody>'+
+      (lista.length ? '<div class="table-wrap"><table><thead><tr><th>Nome</th><th>CPF</th><th>Banco</th><th>Chave PIX</th><th>Status</th><th></th></tr></thead><tbody>'+
         lista.map(f => (
           '<tr class="'+(f.ativo?'':'inativo')+'">'+
             '<td>'+esc(f.nome_completo)+'</td>'+
@@ -301,7 +310,7 @@ async function renderCadastro(){
               (meuPerfil.tipo==='master' ? ' <button class="btn-danger" onclick=\'excluirFreelancer('+JSON.stringify(f.id)+')\' title="Excluir cadastro (permanente)">🗑️</button>' : '')+
             '</td>'+
           '</tr>'
-        )).join('')+'</tbody></table>'
+        )).join('')+'</tbody></table></div>'
       : '<div class="empty">Nenhum freelancer cadastrado nesta loja ainda.</div>')+
     '</div>';
 }
@@ -490,7 +499,7 @@ async function renderHistorico(){
   $('mainContent').innerHTML =
     '<div class="card">'+
       '<h2>Minhas Solicitações — '+esc(lojaAtual)+'</h2>'+
-      '<table><thead><tr><th>Freelancer</th><th>Diárias</th><th>Total</th><th>Status</th><th>Detalhe</th><th></th></tr></thead><tbody>'+
+      '<div class="table-wrap"><table><thead><tr><th>Freelancer</th><th>Diárias</th><th>Total</th><th>Status</th><th>Detalhe</th><th></th></tr></thead><tbody>'+
       lista.map(s => {
         const ds = diariasPorSol[s.id] || [];
         const total = ds.reduce((a,d)=>a+Number(d.valor_diaria),0);
@@ -508,7 +517,7 @@ async function renderHistorico(){
           '<td style="white-space:nowrap">'+acoes.join(' ')+'</td>'+
         '</tr>';
       }).join('')+
-      '</tbody></table>'+
+      '</tbody></table></div>'+
     '</div>';
 }
 
@@ -662,7 +671,7 @@ async function carregarGastoConsolidado(){
       '<div class="stat" style="background:var(--bordo)"><div class="num" style="color:var(--creme)">'+fmtMoeda(custoEmpresaGeral)+'</div><div class="lbl" style="color:var(--marrom-light)">Custo total pra empresa (+'+pct+'%)</div></div>'+
     '</div>'+
     (lista.length ?
-      '<table style="margin-top:16px"><thead><tr><th>Loja</th><th>Diárias</th><th>Total Aprovado</th><th>Pago</th><th>Pendente</th><th>Custo p/ Empresa</th></tr></thead><tbody>'+
+      '<div class="table-wrap"><table style="margin-top:16px"><thead><tr><th>Loja</th><th>Diárias</th><th>Total Aprovado</th><th>Pago</th><th>Pendente</th><th>Custo p/ Empresa</th></tr></thead><tbody>'+
         lista.map(l => (
           '<tr>'+
             '<td>'+esc(l.loja)+'</td>'+
@@ -674,7 +683,7 @@ async function carregarGastoConsolidado(){
           '</tr>'
         )).join('')+
         '<tr style="font-weight:600;border-top:2px solid var(--creme-dark)"><td>Total Geral</td><td>'+qtdGeral+'</td><td>'+fmtMoeda(totalAprovado)+'</td><td>'+fmtMoeda(totalPago)+'</td><td>'+fmtMoeda(totalPendente)+'</td><td>'+fmtMoeda(custoEmpresaGeral)+'</td></tr>'+
-      '</tbody></table>'
+      '</tbody></table></div>'
     : '<div class="empty" style="margin-top:12px">Nenhuma diária aprovada nesse mês em nenhuma loja ainda.</div>');
 }
 
@@ -726,7 +735,7 @@ async function carregarGasto(){
   const lista = detalheR.data || [];
   $('gastoDetalhe').innerHTML =
     '<h3 style="font-family:\'Cormorant Garamond\',serif;font-size:1.05rem;color:var(--bordo-dark);margin-bottom:8px">Detalhamento</h3>'+
-    (lista.length ? '<table><thead><tr><th>Freelancer</th><th>Data</th><th>Carga</th><th>Valor</th><th>Status</th></tr></thead><tbody>'+
+    (lista.length ? '<div class="table-wrap"><table><thead><tr><th>Freelancer</th><th>Data</th><th>Carga</th><th>Valor</th><th>Status</th></tr></thead><tbody>'+
       lista.map(a => (
         '<tr>'+
           '<td>'+esc(a.nome_completo)+'</td>'+
@@ -735,7 +744,7 @@ async function carregarGasto(){
           '<td>'+fmtMoeda(a.valor_diaria)+'</td>'+
           '<td>'+(a.pago ? '<span class="badge badge-ativo">Pago'+(a.pago_em?' — '+fmtData(a.pago_em.slice(0,10)):'')+'</span>' : '<span class="badge badge-pend">Pendente de pagamento</span>')+'</td>'+
         '</tr>'
-      )).join('')+'</tbody></table>'
+      )).join('')+'</tbody></table></div>'
     : '<div class="empty">Nenhuma diária aprovada nesse mês.</div>');
 }
 
@@ -752,7 +761,7 @@ async function renderAprovacao(){
   $('mainContent').innerHTML =
     '<div class="card">'+
       '<h2>Fila de Aprovação</h2>'+
-      (lista.length ? '<table><thead><tr><th>Loja</th><th>Freelancer</th><th>Diárias</th><th>Total</th><th>Solicitado por</th><th>Obs.</th><th></th></tr></thead><tbody>'+
+      (lista.length ? '<div class="table-wrap"><table><thead><tr><th>Loja</th><th>Freelancer</th><th>Diárias</th><th>Total</th><th>Solicitado por</th><th>Obs.</th><th></th></tr></thead><tbody>'+
         lista.map(s => (
           '<tr>'+
             '<td>'+esc(s.loja)+'</td>'+
@@ -766,7 +775,7 @@ async function renderAprovacao(){
               '<button class="btn-danger" onclick=\'abrirReprovar('+JSON.stringify(s.solicitacao_id)+')\'>Reprovar</button>'+
             '</td>'+
           '</tr>'
-        )).join('')+'</tbody></table>'
+        )).join('')+'</tbody></table></div>'
       : '<div class="empty">Nenhuma solicitação pendente no momento.</div>')+
     '</div>';
 }
@@ -817,7 +826,7 @@ async function renderAprovados(){
 
   const souMaster = meuPerfil.tipo === 'master';
   $('aprovadosTabela').outerHTML = lista.length ?
-    '<div id="aprovadosTabela"><table><thead><tr><th>Loja</th><th>Freelancer</th><th>CPF</th><th>Banco</th><th>Ag./Conta</th><th>PIX</th><th>Data</th><th>Carga</th><th>Valor</th><th>Pago</th>'+(souMaster?'<th></th>':'')+'</tr></thead><tbody>'+
+    '<div id="aprovadosTabela"><div class="table-wrap"><table><thead><tr><th>Loja</th><th>Freelancer</th><th>CPF</th><th>Banco</th><th>Ag./Conta</th><th>PIX</th><th>Data</th><th>Carga</th><th>Valor</th><th>Pago</th>'+(souMaster?'<th></th>':'')+'</tr></thead><tbody>'+
       lista.map(a => (
         '<tr>'+
           '<td>'+esc(a.loja)+'</td>'+
@@ -834,7 +843,7 @@ async function renderAprovados(){
           '</td>'+
           (souMaster ? '<td><button class="btn-danger" onclick=\'excluirSolicitacao('+JSON.stringify(a.solicitacao_id)+')\' title="Excluir o lançamento inteiro (todas as diárias dessa solicitação)">🗑️</button></td>' : '')+
         '</tr>'
-      )).join('')+'</tbody></table></div>'
+      )).join('')+'</tbody></table></div></div>'
     : '<div id="aprovadosTabela" class="empty">Nenhuma diária aprovada aguardando pagamento.</div>';
 }
 
@@ -898,14 +907,14 @@ async function carregarRelatorio(){
   const custoEmpresaGeral = totalGeral * (1 + pct/100);
 
   const tabelaResumo = lista.length ?
-    '<table><thead><tr><th>Loja</th><th>Diárias</th><th>Total Pago ao Freelancer</th><th>Custo Total pra Empresa (+'+pct+'%)</th></tr></thead><tbody>'+
+    '<div class="table-wrap"><table><thead><tr><th>Loja</th><th>Diárias</th><th>Total Pago ao Freelancer</th><th>Custo Total pra Empresa (+'+pct+'%)</th></tr></thead><tbody>'+
       lista.map(l => '<tr><td>'+esc(l.loja)+'</td><td>'+l.qtd_diarias+'</td><td>'+fmtMoeda(l.total_gasto)+'</td><td>'+fmtMoeda(Number(l.total_gasto)*(1+pct/100))+'</td></tr>').join('')+
       '<tr style="font-weight:600;border-top:2px solid var(--creme-dark)"><td>Total Geral</td><td>'+diariasGeral+'</td><td>'+fmtMoeda(totalGeral)+'</td><td>'+fmtMoeda(custoEmpresaGeral)+'</td></tr>'+
-    '</tbody></table>'
+    '</tbody></table></div>'
     : '<div class="empty">Nenhum gasto aprovado neste mês.</div>';
 
   const tabelaDetalhe = detalhe.length ?
-    '<table><thead><tr><th>Loja</th><th>Freelancer</th><th>CPF</th><th>Banco</th><th>Ag./Conta</th><th>PIX</th><th>Data</th><th>Carga</th><th>Valor</th><th>Pago</th></tr></thead><tbody>'+
+    '<div class="table-wrap"><table><thead><tr><th>Loja</th><th>Freelancer</th><th>CPF</th><th>Banco</th><th>Ag./Conta</th><th>PIX</th><th>Data</th><th>Carga</th><th>Valor</th><th>Pago</th></tr></thead><tbody>'+
       detalhe.map(a => (
         '<tr>'+
           '<td>'+esc(a.loja)+'</td>'+
@@ -919,7 +928,7 @@ async function carregarRelatorio(){
           '<td>'+fmtMoeda(a.valor_diaria)+'</td>'+
           '<td>'+(a.pago?'<span class="badge badge-ativo">Sim</span>':'<span class="badge badge-pend">Não</span>')+'</td>'+
         '</tr>'
-      )).join('')+'</tbody></table>'
+      )).join('')+'</tbody></table></div>'
     : '<div class="empty">Nenhum pagamento aprovado neste mês.</div>';
 
   $('relatorioTabela').innerHTML =
