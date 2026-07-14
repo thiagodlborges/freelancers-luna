@@ -118,6 +118,7 @@
   <div class="tab" id="tabHistorico" data-tab="historico" onclick="mudarTab('historico')">📋 Minhas Solicitações</div>
   <div class="tab" id="tabGasto" data-tab="gasto" onclick="mudarTab('gasto')">💰 Gasto do Mês</div>
   <div class="tab" id="tabAprovacao" style="display:none" data-tab="aprovacao" onclick="mudarTab('aprovacao')">✅ Aprovação</div>
+  <div class="tab" id="tabPrevia" style="display:none" data-tab="previa" onclick="mudarTab('previa')">🕓 Prévia</div>
   <div class="tab" id="tabAprovados" style="display:none" data-tab="aprovados" onclick="mudarTab('aprovados')">🏦 Pagamentos</div>
   <div class="tab" id="tabRelatorio" style="display:none" data-tab="relatorio" onclick="mudarTab('relatorio')">📊 Relatório Mensal</div>
 </nav>
@@ -253,7 +254,7 @@ async function verificarAcessoEIniciar(){
   }
 
   if (souCoordenador) $('tabAprovacao').style.display = '';
-  if (souAgencia) { $('tabAprovados').style.display = ''; $('tabRelatorio').style.display = ''; }
+  if (souAgencia) { $('tabPrevia').style.display = ''; $('tabAprovados').style.display = ''; $('tabRelatorio').style.display = ''; }
   if (souCoordenador && !souAgencia) $('tabRelatorio').style.display = '';
 
   const { data: cfg } = await sb.from('freelancer_config').select('*').eq('id', true).maybeSingle();
@@ -279,6 +280,7 @@ function renderTab(){
   else if(currentTab==='historico') renderHistorico();
   else if(currentTab==='gasto') renderGasto();
   else if(currentTab==='aprovacao') renderAprovacao();
+  else if(currentTab==='previa') renderPrevia();
   else if(currentTab==='aprovados') renderAprovados();
   else if(currentTab==='relatorio') renderRelatorio();
 }
@@ -457,20 +459,16 @@ async function salvarSolicitacao(){
   const btn = $('btnSalvarSol');
   btn.disabled = true; btn.textContent = 'Enviando…';
 
-  const { data: novaSol, error: errSol } = await sb.from('freelancer_solicitacoes').insert({
-    loja: lojaAtual, freelancer_id, status: 'pendente',
-    solicitado_por: meuPerfil.id, solicitado_por_nome: meuPerfil.nome,
-    observacao: $('solObs').value.trim() || null,
-  }).select('id').single();
-
-  if(errSol){ btn.disabled=false; btn.textContent='Enviar para Aprovação'; showMsg('solMsg','Erro: '+errSol.message,'err'); return; }
-
-  const { error: errDiarias } = await sb.from('freelancer_solicitacao_diarias').insert(
-    linhas.map(l => ({ solicitacao_id: novaSol.id, data_servico: l.data_servico, carga_horaria: l.carga_horaria, valor_diaria: l.valor_diaria }))
-  );
+  const { error: errRpc } = await sb.rpc('registrar_solicitacao_freelancer', {
+    p_loja: lojaAtual,
+    p_freelancer_id: freelancer_id,
+    p_observacao: $('solObs').value.trim() || null,
+    p_solicitado_por_nome: meuPerfil.nome,
+    p_diarias: linhas,
+  });
 
   btn.disabled = false; btn.textContent = 'Enviar para Aprovação';
-  if(errDiarias){ showMsg('solMsg','Erro ao salvar diárias: '+errDiarias.message,'err'); return; }
+  if(errRpc){ showMsg('solMsg','Erro: '+errRpc.message,'err'); return; }
 
   showMsg('solMsg','Solicitação enviada! Aguardando aprovação do coordenador.','ok');
   setTimeout(() => { if(currentTab==='solicitar') renderSolicitar(); }, 1200);
@@ -573,19 +571,15 @@ async function salvarEdicaoSolicitacao(){
   const btn = $('btnSalvarEdicaoSol');
   btn.disabled = true; btn.textContent = 'Salvando…';
 
-  const { error: errHeader } = await sb.from('freelancer_solicitacoes').update({
-    freelancer_id, observacao: $('editSolObs').value.trim() || null,
-  }).eq('id', editandoSolicitacaoId);
-  if(errHeader){ btn.disabled=false; btn.textContent='Salvar Alterações'; showMsg('editSolMsg','Erro: '+errHeader.message,'err'); return; }
+  const { error: errRpc } = await sb.rpc('editar_solicitacao_freelancer', {
+    p_solicitacao_id: editandoSolicitacaoId,
+    p_freelancer_id: freelancer_id,
+    p_observacao: $('editSolObs').value.trim() || null,
+    p_diarias: linhas,
+  });
 
-  const { error: errDel } = await sb.from('freelancer_solicitacao_diarias').delete().eq('solicitacao_id', editandoSolicitacaoId);
-  if(errDel){ btn.disabled=false; btn.textContent='Salvar Alterações'; showMsg('editSolMsg','Erro: '+errDel.message,'err'); return; }
-
-  const { error: errIns } = await sb.from('freelancer_solicitacao_diarias').insert(
-    linhas.map(l => ({ solicitacao_id: editandoSolicitacaoId, data_servico: l.data_servico, carga_horaria: l.carga_horaria, valor_diaria: l.valor_diaria }))
-  );
   btn.disabled = false; btn.textContent = 'Salvar Alterações';
-  if(errIns){ showMsg('editSolMsg','Erro ao salvar diárias: '+errIns.message,'err'); return; }
+  if(errRpc){ showMsg('editSolMsg','Erro: '+errRpc.message,'err'); return; }
 
   fecharModal('modalEditarSolicitacao');
   renderHistorico();
@@ -805,6 +799,35 @@ async function confirmarReprovar(){
   if(error){ showMsg('reprovarMsg','Erro: '+error.message,'err'); return; }
   fecharModal('modalReprovar');
   renderAprovacao();
+}
+
+// ── PRÉVIA (agência) — solicitações ainda não aprovadas ──
+async function renderPrevia(){
+  const el = $('mainContent');
+  el.innerHTML =
+    '<div class="card">'+
+      '<h2 style="margin-bottom:4px">Prévia — Aguardando Aprovação</h2>'+
+      '<p style="font-size:.8rem;color:var(--text-light);margin-bottom:14px">Essas solicitações ainda não foram aprovadas pelo coordenador. Podem ser alteradas ou reprovadas — não considere como confirmado até aparecer na aba <strong>Pagamentos</strong>.</p>'+
+      '<div id="previaTabela" class="loading">Carregando…</div>'+
+    '</div>';
+
+  const { data, error } = await sb.from('vw_freelancer_previa_agencia').select('*').order('loja').order('data_servico');
+  if(error){ $('previaTabela').innerHTML = '<div class="empty">Erro: '+esc(error.message)+'</div>'; return; }
+  const lista = data || [];
+
+  $('previaTabela').outerHTML = lista.length ?
+    '<div id="previaTabela"><div class="table-wrap"><table><thead><tr><th>Loja</th><th>Freelancer</th><th>Data</th><th>Carga</th><th>Valor</th><th>Solicitado por</th></tr></thead><tbody>'+
+      lista.map(p => (
+        '<tr>'+
+          '<td>'+esc(p.loja)+'</td>'+
+          '<td>'+esc(p.nome_completo)+'</td>'+
+          '<td>'+fmtData(p.data_servico)+'</td>'+
+          '<td>'+esc(p.carga_horaria||'—')+'</td>'+
+          '<td>'+fmtMoeda(p.valor_diaria)+'</td>'+
+          '<td>'+esc(p.solicitado_por_nome||'—')+'</td>'+
+        '</tr>'
+      )).join('')+'</tbody></table></div></div>'
+    : '<div id="previaTabela" class="empty">Nenhuma solicitação pendente no momento.</div>';
 }
 
 // ── PAGAMENTOS (agência) ─────────────────────────────────
