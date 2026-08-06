@@ -203,6 +203,7 @@ let lojaAtual = null;
 let currentTab = 'cadastro';
 let souCoordenador = false;
 let souAgencia = false;
+let souLeituraGeral = false;
 let temPapelDeLoja = false;
 let freelancersDaLoja = [];
 let freelancerConfig = { percentual_custo_empresa: 0 };
@@ -232,6 +233,7 @@ async function verificarAcessoEIniciar(){
   temPapelDeLoja = ['loja','master_loja','master'].includes(perfil.tipo);
   souCoordenador = perfil.freelancer_coordenador === true || perfil.tipo === 'master';
   souAgencia = perfil.freelancer_agencia === true || perfil.tipo === 'master';
+  souLeituraGeral = perfil.tipo === 'backoffice';
 
   if (perfil.tipo === 'master' || perfil.tipo === 'master_loja') minhasLojas = [...TODAS_LOJAS];
   else if (perfil.lojas && perfil.lojas.length) minhasLojas = perfil.lojas;
@@ -239,14 +241,15 @@ async function verificarAcessoEIniciar(){
   else minhasLojas = [];
 
   if (!temPapelDeLoja || !minhasLojas.length) {
-    // Coordenador/Agência puros não têm loja própria — escondem telas de loja.
-    // Gasto do Mês fica visível pro coordenador: agora tem a visão consolidada de todas as lojas.
+    // Coordenador/Agência/Backoffice puros não têm loja própria — escondem telas de loja.
+    // Gasto do Mês fica visível pro coordenador e pro backoffice: é a visão consolidada de todas as lojas.
     const idsParaRemover = ['tabCadastro','tabSolicitar','tabHistorico'];
-    if (!souCoordenador) idsParaRemover.push('tabGasto');
+    if (!souCoordenador && !souLeituraGeral) idsParaRemover.push('tabGasto');
     idsParaRemover.forEach(id => { const el = $(id); if (el) el.remove(); });
     $('seletorLojaWrap').style.display = 'none';
     if (souCoordenador) { currentTab = 'aprovacao'; }
     else if (souAgencia) { currentTab = 'aprovados'; }
+    else if (souLeituraGeral) { currentTab = 'relatorio'; }
   } else {
     const sel = $('seletorLoja');
     sel.innerHTML = minhasLojas.map(l => '<option value="'+esc(l)+'">'+esc(l)+'</option>').join('');
@@ -256,6 +259,7 @@ async function verificarAcessoEIniciar(){
   if (souCoordenador) $('tabAprovacao').style.display = '';
   if (souAgencia) { $('tabPrevia').style.display = ''; $('tabAprovados').style.display = ''; $('tabRelatorio').style.display = ''; }
   if (souCoordenador && !souAgencia) $('tabRelatorio').style.display = '';
+  if (souLeituraGeral) { $('tabRelatorio').style.display = ''; $('tabGasto').style.display = ''; }
 
   const { data: cfg } = await sb.from('freelancer_config').select('*').eq('id', true).maybeSingle();
   if (cfg) freelancerConfig = cfg;
@@ -600,7 +604,7 @@ async function renderGasto(){
 
   let html = '';
 
-  if (souCoordenador) {
+  if (souCoordenador || souLeituraGeral) {
     html +=
       '<div class="card">'+
         '<div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:14px;margin-bottom:16px">'+
@@ -634,7 +638,7 @@ async function renderGasto(){
 
   $('mainContent').innerHTML = html || '<div class="empty">Nenhuma informação disponível.</div>';
 
-  if (souCoordenador) await carregarGastoConsolidado();
+  if (souCoordenador || souLeituraGeral) await carregarGastoConsolidado();
   if (temPapelDeLoja && lojaAtual) await carregarGasto();
 }
 
