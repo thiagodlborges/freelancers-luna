@@ -866,7 +866,7 @@ async function renderAprovados(){
           '<td>'+esc(a.carga_horaria||'—')+'</td>'+
           '<td>'+fmtMoeda(a.valor_diaria)+'</td>'+
           '<td style="text-align:center">'+
-            '<input type="checkbox" '+(a.pago?'checked':'')+' onchange=\'togglePago('+JSON.stringify(a.diaria_id)+',this.checked)\' style="width:18px;height:18px;cursor:pointer" title="'+(a.pago && a.pago_em ? 'Pago em '+fmtData(a.pago_em.slice(0,10))+(a.pago_por_nome?' por '+esc(a.pago_por_nome):'') : 'Marcar como pago')+'">'+
+            '<input type="checkbox" '+(a.pago?'checked':'')+' onchange=\'togglePago(this,'+JSON.stringify(a.diaria_id)+',this.checked)\' style="width:18px;height:18px;cursor:pointer" title="'+(a.pago && a.pago_em ? 'Pago em '+fmtData(a.pago_em.slice(0,10))+(a.pago_por_nome?' por '+esc(a.pago_por_nome):'') : 'Marcar como pago')+'">'+
           '</td>'+
           (souMaster ? '<td><button class="btn-danger" onclick=\'excluirSolicitacao('+JSON.stringify(a.solicitacao_id)+')\' title="Excluir o lançamento inteiro (todas as diárias dessa solicitação)">🗑️</button></td>' : '')+
         '</tr>'
@@ -874,13 +874,28 @@ async function renderAprovados(){
     : '<div id="aprovadosTabela" class="empty">Nenhuma diária aprovada aguardando pagamento.</div>';
 }
 
-async function togglePago(diaria_id, marcado){
+async function togglePago(checkboxEl, diaria_id, marcado){
+  checkboxEl.disabled = true;
   const payload = marcado
     ? { pago: true, pago_em: new Date().toISOString(), pago_por: meuPerfil.id, pago_por_nome: meuPerfil.nome }
     : { pago: false, pago_em: null, pago_por: null, pago_por_nome: null };
   const { error } = await sb.from('freelancer_solicitacao_diarias').update(payload).eq('id', diaria_id);
-  if(error){ alert('Erro: '+error.message); }
-  renderAprovados();
+  checkboxEl.disabled = false;
+
+  if(error){
+    alert('Erro: '+error.message);
+    checkboxEl.checked = !marcado; // desfaz visualmente, já que não salvou
+    return;
+  }
+
+  // Atualiza só o cache local (usado no Excel) e o título do próprio checkbox —
+  // sem rebuscar nem redesenhar a tabela inteira, pra dar pra marcar várias
+  // seguidas sem a tela "pular" a cada clique.
+  const item = (window.__aprovadosCache||[]).find(a => a.diaria_id === diaria_id);
+  if(item) Object.assign(item, payload);
+  checkboxEl.title = payload.pago
+    ? 'Pago em '+fmtData(payload.pago_em.slice(0,10))+(payload.pago_por_nome?' por '+esc(payload.pago_por_nome):'')
+    : 'Marcar como pago';
 }
 
 function exportarAprovadosExcel(){
