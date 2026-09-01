@@ -835,6 +835,9 @@ async function renderPrevia(){
 }
 
 // ── PAGAMENTOS (agência) ─────────────────────────────────
+let _aprovadosSortCol = 'data_servico';
+let _aprovadosSortDir = 'desc';
+
 async function renderAprovados(){
   const el = $('mainContent');
   el.innerHTML =
@@ -849,11 +852,41 @@ async function renderAprovados(){
   const { data, error } = await sb.from('vw_freelancer_aprovados_detalhe').select('*').order('loja').order('data_servico',{ascending:false});
   if(error){ $('aprovadosTabela').innerHTML = '<div class="empty">Erro: '+esc(error.message)+'</div>'; return; }
   window.__aprovadosCache = data || [];
-  const lista = window.__aprovadosCache;
+  renderTabelaAprovados();
+}
+
+function ordenarAprovados(coluna){
+  if(_aprovadosSortCol === coluna){
+    _aprovadosSortDir = _aprovadosSortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    _aprovadosSortCol = coluna;
+    _aprovadosSortDir = coluna === 'pago' ? 'desc' : 'asc'; // "pago" começa mostrando os pagos primeiro
+  }
+  renderTabelaAprovados();
+}
+
+function renderTabelaAprovados(){
+  const lista = [...(window.__aprovadosCache||[])];
+  const col = _aprovadosSortCol, dir = _aprovadosSortDir === 'asc' ? 1 : -1;
+  lista.sort((a,b) => {
+    let va = a[col], vb = b[col];
+    if(col === 'pago'){ va = va ? 1 : 0; vb = vb ? 1 : 0; }
+    if(va == null && vb == null) return 0;
+    if(va == null) return -1*dir;
+    if(vb == null) return 1*dir;
+    if(va < vb) return -1*dir;
+    if(va > vb) return 1*dir;
+    return 0;
+  });
 
   const souMaster = meuPerfil.tipo === 'master';
+  const seta = c => _aprovadosSortCol===c ? (_aprovadosSortDir==='asc'?' ▲':' ▼') : '';
+  const thOrdenavel = (label, coluna) => '<th style="cursor:pointer;user-select:none" onclick="ordenarAprovados(\''+coluna+'\')" title="Clique pra ordenar">'+label+seta(coluna)+'</th>';
+
   $('aprovadosTabela').outerHTML = lista.length ?
-    '<div id="aprovadosTabela"><div class="table-wrap"><table><thead><tr><th>Loja</th><th>Freelancer</th><th>CPF</th><th>Banco</th><th>Ag./Conta</th><th>PIX</th><th>Data</th><th>Carga</th><th>Valor</th><th>Pago</th>'+(souMaster?'<th></th>':'')+'</tr></thead><tbody>'+
+    '<div id="aprovadosTabela"><div class="table-wrap"><table><thead><tr><th>Loja</th><th>Freelancer</th><th>CPF</th><th>Banco</th><th>Ag./Conta</th><th>PIX</th>'+
+      thOrdenavel('Data','data_servico')+'<th>Carga</th><th>Valor</th>'+
+      thOrdenavel('Data Lançamento','data_aprovacao')+thOrdenavel('Pago','pago')+(souMaster?'<th></th>':'')+'</tr></thead><tbody>'+
       lista.map(a => (
         '<tr>'+
           '<td>'+esc(a.loja)+'</td>'+
@@ -865,6 +898,7 @@ async function renderAprovados(){
           '<td>'+fmtData(a.data_servico)+'</td>'+
           '<td>'+esc(a.carga_horaria||'—')+'</td>'+
           '<td>'+fmtMoeda(a.valor_diaria)+'</td>'+
+          '<td>'+fmtData(a.data_aprovacao)+'</td>'+
           '<td style="text-align:center">'+
             '<input type="checkbox" '+(a.pago?'checked':'')+' onchange=\'togglePago(this,'+JSON.stringify(a.diaria_id)+',this.checked)\' style="width:18px;height:18px;cursor:pointer" title="'+(a.pago && a.pago_em ? 'Pago em '+fmtData(a.pago_em.slice(0,10))+(a.pago_por_nome?' por '+esc(a.pago_por_nome):'') : 'Marcar como pago')+'">'+
           '</td>'+
