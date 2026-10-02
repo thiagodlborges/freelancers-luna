@@ -835,6 +835,20 @@ async function renderPrevia(){
 }
 
 // ── PAGAMENTOS (agência) ─────────────────────────────────
+// O Supabase devolve no máximo 1000 linhas por consulta; sem paginar, as
+// últimas lojas (ordem alfabética) sumiam da tela e do Excel.
+async function buscarTodasLinhas(montarQuery){
+  const TAM = 1000;
+  let todas = [];
+  for(let ini = 0; ; ini += TAM){
+    const { data, error } = await montarQuery().range(ini, ini + TAM - 1);
+    if(error) return { data: null, error };
+    todas = todas.concat(data || []);
+    if(!data || data.length < TAM) break;
+  }
+  return { data: todas, error: null };
+}
+
 let _aprovadosSortCol = 'data_servico';
 let _aprovadosSortDir = 'desc';
 
@@ -849,7 +863,7 @@ async function renderAprovados(){
       '<div id="aprovadosTabela" class="loading">Carregando…</div>'+
     '</div>';
 
-  const { data, error } = await sb.from('vw_freelancer_aprovados_detalhe').select('*').order('loja').order('data_servico',{ascending:false});
+  const { data, error } = await buscarTodasLinhas(() => sb.from('vw_freelancer_aprovados_detalhe').select('*').order('loja').order('data_servico',{ascending:false}).order('diaria_id'));
   if(error){ $('aprovadosTabela').innerHTML = '<div class="empty">Erro: '+esc(error.message)+'</div>'; return; }
   window.__aprovadosCache = data || [];
   renderTabelaAprovados();
@@ -970,7 +984,7 @@ async function carregarRelatorio(){
 
   const [resumoR, detalheR] = await Promise.all([
     sb.from('vw_freelancer_gasto_mensal').select('*').eq('mes_referencia', mesRef).order('loja'),
-    sb.from('vw_freelancer_aprovados_detalhe').select('*').gte('data_servico', mesRef).lte('data_servico', ultimoDia).order('loja').order('nome_completo'),
+    buscarTodasLinhas(() => sb.from('vw_freelancer_aprovados_detalhe').select('*').gte('data_servico', mesRef).lte('data_servico', ultimoDia).order('loja').order('nome_completo').order('data_servico').order('diaria_id')),
   ]);
   if(resumoR.error){ $('relatorioTabela').innerHTML = '<div class="empty">Erro: '+esc(resumoR.error.message)+'</div>'; return; }
   window.__relatorioCache = resumoR.data || [];
